@@ -96,3 +96,4 @@ cmake-build-release/
 
 results/
 Examples/Multi-Inertial/multi_inertial_prepared
+Examples/Multi-Inertial/prepared_camera_audit

@@ -107,6 +107,7 @@ public:
     int GetNumberDataset();
     int GetMatchesInliers();
     unsigned long reset_count = 0;
+    bool filter_invalid_rays = false;
 
     //DEBUG
     void SaveSubTrajectory(string strNameFile_frames, string strNameFile_kf, string strFolder="");

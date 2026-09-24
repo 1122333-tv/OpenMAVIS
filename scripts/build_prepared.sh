@@ -9,4 +9,4 @@ if [[ ! -s "$root/Vocabulary/ORBvoc.txt" ]]; then
 fi
 cmake -S "$root" -B "$root/build" -DCMAKE_BUILD_TYPE=Release
 cmake --build "$root/build" --target g2o -j "$jobs"
-cmake --build "$root/build" --target multi_inertial_prepared multi_inertial_euroc -j "$jobs"
+cmake --build "$root/build" --target multi_inertial_prepared multi_inertial_euroc prepared_camera_audit -j "$jobs"

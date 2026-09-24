@@ -1515,7 +1515,7 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, const cv::Mat &imSid
              ORBextractor* extractorLeft, ORBextractor* extractorRight, ORBextractor* ORBextractorSideLeft, ORBextractor* ORBextractorSideRight,
              bool bleft, bool bright, bool bsideleft, bool bsideright, ORBVocabulary* voc, cv::Mat &K, cv::Mat &distCoef, const float &bf, const float &thDepth,
              GeometricCamera* pCamera, GeometricCamera* pCamera2, GeometricCamera* pCamera3, GeometricCamera* pCamera4,
-             Sophus::SE3f& Tlr, Sophus::SE3f& Tlsl, Sophus::SE3f& Tlsr, Frame* pPrevF, const IMU::Calib &ImuCalib)
+             Sophus::SE3f& Tlr, Sophus::SE3f& Tlsl, Sophus::SE3f& Tlsr, Frame* pPrevF, const IMU::Calib &ImuCalib, bool filterInvalidRays)
         :mpcpi(NULL), mpORBvocabulary(voc),mpORBextractorLeft(extractorLeft),mpORBextractorRight(extractorRight), mpORBextractorSideLeft(ORBextractorSideLeft),mpORBextractorSideRight(ORBextractorSideRight),
          mbEnableLeft(bleft), mbEnableRight(bright), mbEnableSideLeft(bsideleft), mbEnableSideRight(bsideright), mTimeStamp(timeStamp), mK(K.clone()), mK_(Converter::toMatrix3f(K)),
          mDistCoef(distCoef.clone()), mbf(bf), mThDepth(thDepth), mImuCalib(ImuCalib), mpImuPreintegrated(NULL), mpPrevFrame(pPrevF),mpImuPreintegratedFrame(NULL), mpReferenceKF(static_cast<KeyFrame*>(NULL)), mbImuPreintegrated(false), mpCamera(pCamera), mpCamera2(pCamera2), mpCamera3(pCamera3), mpCamera4(pCamera4),
@@ -1556,6 +1556,45 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, const cv::Mat &imSid
 
     mTimeORB_Ext = std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(time_EndExtORB - time_StartExtORB).count();
 #endif
+
+    // Optional feature-domain gate: preserve descriptor rows and overlap ordering.
+    // The existing unproject returns z=1, so only the first monotonic front-facing
+    // KB4 branch can be represented. Do not change calibration or optimizer gates.
+    if(filterInvalidRays) {
+        auto filter = [](GeometricCamera* camera, vector<cv::KeyPoint>& keys,
+                         cv::Mat& descriptors, int& mono) {
+            auto radial = [&](double t) {
+                double t2=t*t;
+                return t*(1+t2*(camera->getParameter(4)+t2*(camera->getParameter(5)+
+                       t2*(camera->getParameter(6)+t2*camera->getParameter(7)))));
+            };
+            double upper=CV_PI/2-1e-5;
+            for(double t=0.001;t<upper;t+=0.001) {
+                double t2=t*t;
+                double derivative=1+t2*(3*camera->getParameter(4)+t2*(5*camera->getParameter(5)+
+                                  t2*(7*camera->getParameter(6)+t2*9*camera->getParameter(7))));
+                if(derivative<=0) { upper=t-0.001; break; }
+            }
+            const double limit=radial(upper)-2.0/std::min(camera->getParameter(0),camera->getParameter(1));
+            vector<cv::KeyPoint> kept; cv::Mat rows; int keptMono=0;
+            for(size_t i=0;i<keys.size();++i) {
+                auto pt=keys[i].pt;
+                double x=(pt.x-camera->getParameter(2))/camera->getParameter(0);
+                double y=(pt.y-camera->getParameter(3))/camera->getParameter(1);
+                if(std::hypot(x,y)>limit) continue;
+                auto ray=camera->unproject(pt);auto roundtrip=camera->project(ray);
+                double error=cv::norm(roundtrip-pt);
+                if(!std::isfinite(error) || error>2.0) continue;
+                kept.push_back(keys[i]);rows.push_back(descriptors.row(i));
+                if(int(i)<mono) ++keptMono;
+            }
+            keys.swap(kept);descriptors=rows;mono=keptMono;
+        };
+        filter(mpCamera,mvKeys,mDescriptors,monoLeft);
+        filter(mpCamera2,mvKeysRight,mDescriptorsRight,monoRight);
+        filter(mpCamera3,mvKeysSideLeft,mDescriptorsSideLeft,monoSideLeft);
+        filter(mpCamera4,mvKeysSideRight,mDescriptorsSideRight,monoSideRight);
+    }
 
     Nleft = mvKeys.size();
     Nright = mvKeysRight.size();

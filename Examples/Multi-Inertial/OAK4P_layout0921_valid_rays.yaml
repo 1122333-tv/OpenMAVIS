@@ -1,0 +1,151 @@
+%YAML:1.0
+
+# OAK-4P-New -> OpenMAVIS IMU_MULTI configuration
+# Mapping confirmed from physical rig:
+#   Camera1 = cam0 = left-front
+#   Camera2 = cam1 = right-front
+#   Camera3 = cam2 = left-side
+#   Camera4 = cam3 = right-side
+# Source cam_time_offset_ns = 2631359 (2.631359 ms)
+# NOTE: OpenMAVIS core YAML has no cam-IMU time-offset parameter.
+# Apply the calibrated offset in the input timestamps / dataset conversion.
+
+File.version: "1.0"
+Camera.type: "KannalaBrandt8"
+
+# Camera1 <- OAK cam0
+Camera1.fx: 611.774133620145
+Camera1.fy: 611.942957533203
+Camera1.cx: 619.649323315008
+Camera1.cy: 420.193485096409
+Camera1.k1: -0.180530877607933
+Camera1.k2: -0.00495767688134075
+Camera1.k3: 0.0161745454310065
+Camera1.k4: -0.00416035173805469
+
+# Camera2 <- OAK cam1
+Camera2.fx: 609.665010422978
+Camera2.fy: 610.075448433107
+Camera2.cx: 627.868052554775
+Camera2.cy: 362.742749052087
+Camera2.k1: -0.179254936773953
+Camera2.k2: -0.0103907423526669
+Camera2.k3: 0.0216090545609966
+Camera2.k4: -0.00580920268982311
+
+# Camera3 <- OAK cam2
+Camera3.fx: 602.069220267433
+Camera3.fy: 603.155423716701
+Camera3.cx: 614.116225363178
+Camera3.cy: 414.405790215051
+Camera3.k1: -0.152091928477045
+Camera3.k2: -0.0701574543175911
+Camera3.k3: 0.075244339923669
+Camera3.k4: -0.0223333025025442
+
+# Camera4 <- OAK cam3
+Camera4.fx: 608.171715226984
+Camera4.fy: 608.509774531938
+Camera4.cx: 626.693058225104
+Camera4.cy: 362.794548084927
+Camera4.k1: -0.177830692676175
+Camera4.k2: -0.0107994450635857
+Camera4.k3: 0.022072516924084
+Camera4.k4: -0.00609417930936571
+
+# Camera2(cam1) -> Camera1(cam0)
+Stereo.T_c1_c2: !!opencv-matrix
+  rows: 4
+  cols: 4
+  dt: f
+  data: [
+    0.557404429557, -0.456309578421, -0.693600656395, -0.268548059409,
+    0.430786405884, 0.873120974762, -0.228216642548, -0.084523040528,
+    0.709734721157, -0.171584766433, 0.683253462130, -0.127818776297,
+    0.000000000000, 0.000000000000, 0.000000000000, 1.000000000000
+    ]
+
+Camera1.overlappingBegin: 0
+Camera1.overlappingEnd: 1280
+
+Camera2.overlappingBegin: 0
+Camera2.overlappingEnd: 1280
+
+Camera3.overlappingBegin: 0
+Camera3.overlappingEnd: 1280
+
+Camera4.overlappingBegin: 0
+Camera4.overlappingEnd: 1280
+
+Camera.width: 1280
+Camera.height: 800
+Camera.fps: 30
+Camera.RGB: 0
+
+Stereo.ThDepth: 40.0
+
+# Camera1(cam0) -> IMU/body
+IMU.T_b_c1: !!opencv-matrix
+  rows: 4
+  cols: 4
+  dt: f
+  data: [
+    -0.490782772383, 0.468326582573, 0.734712516831, 0.122170298279,
+    -0.870785869747, -0.292104863848, -0.395482891622, -0.154687386854,
+    0.029397948597, -0.833873467962, 0.551172205437, 0.071096728664,
+    0.000000000000, 0.000000000000, 0.000000000000, 1.000000000000
+    ]
+
+# Camera3(cam2) -> IMU/body
+IMU.T_b_c3: !!opencv-matrix
+  rows: 4
+  cols: 4
+  dt: f
+  data: [
+    -0.999664706589, 0.023390935445, -0.011105788544, -0.017855969578,
+    0.018660808777, 0.353457566636, -0.935264413310, -0.165168814561,
+    -0.017951284521, -0.935158068311, -0.353775548417, 0.052613279801,
+    0.000000000000, 0.000000000000, 0.000000000000, 1.000000000000
+    ]
+
+# Camera4(cam3) -> IMU/body
+IMU.T_b_c4: !!opencv-matrix
+  rows: 4
+  cols: 4
+  dt: f
+  data: [
+    0.997622391926, 0.067856066054, 0.012046469533, -0.017735273447,
+    0.019434330225, -0.444696844537, 0.895470280505, 0.160366535743,
+    0.066120117493, -0.893107088069, -0.444958266925, 0.039218576550,
+    0.000000000000, 0.000000000000, 0.000000000000, 1.000000000000
+    ]
+
+# IMU parameters copied numerically from source JSON.
+# Verify whether these source std values use the exact continuous-time
+# noise-density / random-walk convention expected by ORB-SLAM3/OpenMAVIS.
+IMU.NoiseGyro: 0.000282
+IMU.NoiseAcc: 0.016
+IMU.GyroWalk: 0.0001
+IMU.AccWalk: 0.001
+IMU.Frequency: 502.008032128514
+
+ORBextractor.nFeatures: 1000
+ORBextractor.scaleFactor: 1.2
+ORBextractor.nLevels: 8
+ORBextractor.iniThFAST: 15
+ORBextractor.minThFAST: 7
+
+Viewer.KeyFrameSize: 0.05
+Viewer.KeyFrameLineWidth: 1.0
+Viewer.GraphLineWidth: 0.9
+Viewer.PointSize: 2.0
+Viewer.CameraSize: 0.08
+Viewer.CameraLineWidth: 3.0
+Viewer.ViewpointX: 0.0
+Viewer.ViewpointY: -0.7
+Viewer.ViewpointZ: -3.5
+Viewer.ViewpointF: 500.0
+Viewer.imageViewScale: 0.45
+
+# Controlled experiment: reject invalid KB4 feature rays before matching.
+Camera.filterInvalidRays: 1

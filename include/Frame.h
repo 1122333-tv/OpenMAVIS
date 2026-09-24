@@ -401,7 +401,7 @@ public:
           ORBextractor* extractorLeft, ORBextractor* extractorRight, ORBextractor* extractorSideLeft, ORBextractor* extractorSideRight,
           bool bEnableLeft, bool bEnableRight, bool bEnableSideLeft, bool bEnableSideRight, ORBVocabulary* voc, cv::Mat &K, cv::Mat &distCoef, const float &bf, const float &thDepth,
           GeometricCamera* pCamera, GeometricCamera* pCamera2, GeometricCamera* pCamera3, GeometricCamera* pCamera4,
-          Sophus::SE3f& Tlr, Sophus::SE3f& Tlsl, Sophus::SE3f& Tlsr, Frame* pPrevF = static_cast<Frame*>(NULL), const IMU::Calib &ImuCalib = IMU::Calib());
+          Sophus::SE3f& Tlr, Sophus::SE3f& Tlsl, Sophus::SE3f& Tlsr, Frame* pPrevF = static_cast<Frame*>(NULL), const IMU::Calib &ImuCalib = IMU::Calib(), bool filterInvalidRays = false);
 
     //Stereo fisheye
     void ComputeStereoFishEyeMatches();

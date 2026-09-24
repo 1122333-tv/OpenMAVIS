@@ -54,6 +54,9 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
     mnInitialFrameId(0), mbCreatedMap(false), mnFirstFrameId(0), mpCamera2(nullptr), mpLastKeyFrame(static_cast<KeyFrame*>(NULL))
 {
     mnMatchesInliers = 0;
+    cv::FileStorage preparedSettings(strSettingPath, cv::FileStorage::READ);
+    filter_invalid_rays = !preparedSettings["Camera.filterInvalidRays"].empty() &&
+                          int(preparedSettings["Camera.filterInvalidRays"]) != 0;
     // Load camera parameters from settings file
     if(settings){
         newParameterLoader(settings);
@@ -1591,7 +1594,7 @@ Sophus::SE3f Tracking::GrabImageMulti(const cv::Mat &imRectLeft, const cv::Mat &
     if (mSensor == System::IMU_MULTI)
         mCurrentFrame = Frame(mImGray,imGrayRight,imGraySideLeft,imGraySideRight,timestamp,
                               mpORBextractorLeft,mpORBextractorRight,mpORBextractorSideLeft,mpORBextractorSideRight,mbleft, mbright, mbsideleft, mbsideright,
-                              mpORBVocabulary,mK,mDistCoef,mbf,mThDepth,mpCamera,mpCamera2,mpCamera3,mpCamera4,mTlr,mTlsl,mTlsr,&mLastFrame,*mpImuCalib);
+                              mpORBVocabulary,mK,mDistCoef,mbf,mThDepth,mpCamera,mpCamera2,mpCamera3,mpCamera4,mTlr,mTlsl,mTlsr,&mLastFrame,*mpImuCalib,filter_invalid_rays);
 
     mCurrentFrame.mNameFile = filename;
     mCurrentFrame.mnDataset = mnNumDataset;

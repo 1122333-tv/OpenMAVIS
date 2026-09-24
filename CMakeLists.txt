@@ -389,3 +389,6 @@ endif()
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/Multi-Inertial)
 add_executable(multi_inertial_prepared Examples/Multi-Inertial/multi_inertial_prepared.cc)
 target_link_libraries(multi_inertial_prepared ${PROJECT_NAME})
+
+add_executable(prepared_camera_audit Examples/Multi-Inertial/prepared_camera_audit.cc)
+target_link_libraries(prepared_camera_audit ${PROJECT_NAME})
