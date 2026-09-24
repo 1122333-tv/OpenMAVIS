@@ -106,6 +106,7 @@ public:
     void NewDataset();
     int GetNumberDataset();
     int GetMatchesInliers();
+    unsigned long reset_count = 0;
 
     //DEBUG
     void SaveSubTrajectory(string strNameFile_frames, string strNameFile_kf, string strFolder="");

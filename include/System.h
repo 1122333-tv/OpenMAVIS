@@ -187,6 +187,14 @@ public:
     // Information from most recent processed frame
     // You can call this right after TrackMonocular (or stereo or RGBD)
     int GetTrackingState();
+    // Read only on the same caller thread, immediately after TrackMulti.
+    struct MultiDiagnostics {
+        int state, features[4], maps;
+        unsigned long map_id, resets;
+        int stereo_matches, inliers;
+        bool imu_initialized;
+    };
+    MultiDiagnostics GetMultiDiagnostics();
     std::vector<MapPoint*> GetTrackedMapPoints();
     std::vector<cv::KeyPoint> GetTrackedKeyPointsUn();
 

@@ -771,7 +771,7 @@ void System::SaveTrajectoryEuRoC(const string &filename)
 
     vector<Map*> vpMaps = mpAtlas->GetAllMaps();
     int numMaxKFs = 0;
-    Map* pBiggerMap;
+    Map* pBiggerMap = nullptr;
     std::cout << "There are " << std::to_string(vpMaps.size()) << " maps in the atlas" << std::endl;
     for(Map* pMap :vpMaps)
     {
@@ -783,6 +783,7 @@ void System::SaveTrajectoryEuRoC(const string &filename)
         }
     }
 
+    if(!pBiggerMap) return;
     vector<KeyFrame*> vpKFs = pBiggerMap->GetAllKeyFrames();
     sort(vpKFs.begin(),vpKFs.end(),KeyFrame::lId);
 
@@ -971,7 +972,7 @@ void System::SaveTrajectoryEuRoC(const string &filename, Map* pMap)
     }
 
     vector<Map*> vpMaps = mpAtlas->GetAllMaps();
-    Map* pBiggerMap;
+    Map* pBiggerMap = nullptr;
     int numMaxKFs = 0;
     for(Map* pMap :vpMaps)
     {
@@ -982,6 +983,7 @@ void System::SaveTrajectoryEuRoC(const string &filename, Map* pMap)
         }
     }
 
+    if(!pBiggerMap) return;
     vector<KeyFrame*> vpKFs = pBiggerMap->GetAllKeyFrames();
     sort(vpKFs.begin(),vpKFs.end(),KeyFrame::lId);
 
@@ -1138,7 +1140,7 @@ void System::SaveKeyFrameTrajectoryEuRoC(const string &filename)
     cout << endl << "Saving keyframe trajectory to " << filename << " ..." << endl;
 
     vector<Map*> vpMaps = mpAtlas->GetAllMaps();
-    Map* pBiggerMap;
+    Map* pBiggerMap = nullptr;
     int numMaxKFs = 0;
     for(Map* pMap :vpMaps)
     {
@@ -1397,6 +1399,26 @@ void System::SaveDebugData(const int &initIdx)
     f.close();
 }
 
+
+System::MultiDiagnostics System::GetMultiDiagnostics()
+{
+    unique_lock<mutex> lock(mMutexState);
+    const Frame& f = mpTracker->mCurrentFrame;
+    MultiDiagnostics d;
+    d.state = mTrackingState;
+    d.features[0] = f.mvKeys.size();
+    d.features[1] = f.mvKeysRight.size();
+    d.features[2] = f.mvKeysSideLeft.size();
+    d.features[3] = f.mvKeysSideRight.size();
+    d.resets = mpTracker->reset_count;
+    d.inliers = mpTracker->GetMatchesInliers();
+    d.stereo_matches = 0;
+    for(auto index : f.mvLeftToRightMatch) if(index >= 0) ++d.stereo_matches;
+    d.maps = mpAtlas->CountMaps();
+    d.map_id = mpAtlas->GetCurrentMap()->GetId();
+    d.imu_initialized = mpAtlas->isImuInitialized();
+    return d;
+}
 
 int System::GetTrackingState()
 {

@@ -93,3 +93,6 @@ borrar/*
 */ExecMean.txt
 cmake-build-debug/
 cmake-build-release/
+
+results/
+Examples/Multi-Inertial/multi_inertial_prepared
