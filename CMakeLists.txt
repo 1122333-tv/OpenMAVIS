@@ -392,3 +392,6 @@ target_link_libraries(multi_inertial_prepared ${PROJECT_NAME})
 
 add_executable(prepared_camera_audit Examples/Multi-Inertial/prepared_camera_audit.cc)
 target_link_libraries(prepared_camera_audit ${PROJECT_NAME})
+
+add_executable(prepared_match_audit Examples/Multi-Inertial/prepared_match_audit.cc)
+target_link_libraries(prepared_match_audit ${PROJECT_NAME})
