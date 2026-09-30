@@ -6,6 +6,8 @@
 
 计划已在修改源码前保存。以下区分源码检查、针对性测试、构建与真实回放。无 GUI 算法候选 v2 已完成两段数据各三次完整复验，达到所定连续性标准。v2 的 GUI 全量回放发现退出阶段崩溃；保留失败并修复后，v3 的完整 GUI 回放已正常退出。最终 v3 两段数据各三次无 GUI 复验也全部通过。修复后的完整四目惯性回放及所定初始化后连续性验收通过，独立包仍保留启动延迟和初始化前重置限制。
 
+本报告补充 5 张统计图和 2 张原始四目诊断叠图。配图全部读取本轮已保存的 CSV、汇总和轨迹，没有为作图重新运行 SLAM。图中帧号从 0 开始，所有时间曲线使用校正图像时间相对该包首帧的秒数。
+
 ## 输入
 
 复用计划中的两个 Basalt 配组包，开发 1195 帧，独立验证 2683 帧。相机偏移 +2631359 ns。不得叠加 mocap 偏移。
@@ -85,6 +87,10 @@ E3 探索构建的后续审查发现新增 mvuRight 数组长度需要保持全�
 E6 最终合成测试 25/25，包括实际四相机 PoseOptimization 恢复合成位姿、零角速/恒加速、旋转加速解析解。恒加速度时积分时长误差 4.47e-8 秒，速度误差 2.89e-6 m/s，位置误差 8.74e-8 m。输入/汇总测试 19/19，使用本轮 E6 新入口运行。新旧四目入口均构建通过。
 
 独立输入逐图检查：`validation01_input.log` 确认全部 2683 组 / 10732 张 1280×800 图像成功解码，IMU 45059 条。相同相机配置和偏移，不重新配组。
+
+![开发包各实验的初始化后 OK 比例与首次 IMU 初始化帧](/home/yuewang/Project/VSLAM/four_fisheye_rig/OpenMAVIS/results/repair_20260930T142226/report_figures_v2/01_experiment_metrics.png)
+
+**图 1：开发包逐阶段完整回放指标。** 来源为 E0–E6 对应完整运行及 `E7_v3_debug_1/2/3` 的 `summary.json`，详细运行名见配图清单。每个点表示一次 1195 帧回放，重复点仅纵向错开，没有求均值或估计置信区间。虚线分别为初始化后 OK ≥95% 和前 300 组初始化期限（最大帧号 299）。E4 前双目 30 点虽然初始化后为 100% OK，但第 318 帧才初始化，未满足开发期限；50 点版本未初始化，初始化后比例未定义，未画成 0%。这些实验顺序包含不同因素，不能仅凭相邻点差异认定单项因果收益。
 
 ## 最终候选逻辑
 
@@ -176,6 +182,18 @@ E9 保持 30 点，仅增加可靠 bootstrap 检查：开发 1195/1195、第 136
 
 已核对代表运行前 128 张叠图齐全，初始化前后 ±5 帧共 11 张齐全，并查看开发包第 140 帧四路诊断叠图。绿色连接为接受的相机对匹配，暗红连接为抽样拒绝候选；绿色点为地图内点、红色点为优化外点、蓝色点为未关联特征，黄色短线显示投影到测量的误差。叠图用于诊断对应关系，不能作为绝对精度证明。
 
+![两段数据前 128 帧的三对三角化通过数与合并后独立种子数](/home/yuewang/Project/VSLAM/four_fisheye_rig/OpenMAVIS/results/repair_20260930T142226/report_figures_v2/02_match_support.png)
+
+**图 2：前 128 帧几何支持。** 固定选择最终候选各包第一次复验 `E7_v3_debug_1`、`E7_v3_validation01_1`，读取 `match_stages.csv` 的各对 `accepted` 和 `diagnostics.csv` 的 `rig_seeds`，未选择最优运行。彩色曲线为跨对合并前的三角化通过数，黑线为合并、去重后的独立种子，不能把三条彩色曲线之和当作独立点数。30 点线仅表示点数门槛，还须通过空间覆盖和后续可靠 bootstrap 检查。独立包前 128 帧没有达到点数门槛，图中保留这一启动等待。
+
+![开发包第 136 帧首次 IMU 初始化时的原始四目诊断叠图](/home/yuewang/Project/VSLAM/four_fisheye_rig/OpenMAVIS/results/repair_20260930T142226/report_figures_v2/03_debug_initialization.jpg)
+
+**图 3：开发包首次 IMU 初始化帧的四目对应。** 来源为 `E7_v3_debug_1/overlays/frame_136.jpg`，即第 137 组输入、距首帧 4.533408 秒。按上述颜色口径显示匹配、地图观测及投影误差。图像为程序保存的诊断叠图，并非 GUI 截屏；直接复制原 JPEG 字节，未裁剪或调整颜色。
+
+![独立包第 727 帧首次 IMU 初始化时的原始四目诊断叠图](/home/yuewang/Project/VSLAM/four_fisheye_rig/OpenMAVIS/results/repair_20260930T142226/report_figures_v2/04_validation_initialization.jpg)
+
+**图 4：独立包首次 IMU 初始化帧的四目对应。** 来源为 `E7_v3_validation01_1/overlays/frame_727.jpg`，即第 728 组输入、距首帧 24.233765 秒。同样直接复制原 JPEG，按首次实际 IMU 初始化帧选取，不以画面质量挑帧；此前失败与重置区段见图 5。
+
 ## GUI 退出失败及单独修复
 
 `GUI_v2_debug` 使用相同 v2 候选，`--viewer --realtime` 连接 DISPLAY=:1。实际处理 1195/1195，136 帧 IMU 初始化，初始化后 OK=100%，末帧 OK，重置 0，轨迹 1133 行、关键帧 39 行。日志 `Starting the Viewer` 位于 Pangolin/OpenCV 窗口创建之后，证明进入了真实 GUI 链路。但程序在最终退出时 SIGSEGV（exit_code=-11），故 GUI 验收为 NOT_PASSED，保留全部结果。
@@ -221,6 +239,14 @@ E9 保持 30 点，仅增加可靠 bootstrap 检查：开发 1195/1195、第 136
 六次各有实际 imu_initialized 事件，不可靠 bootstrap 关键帧尝试为 0；逐帧索引完整，图像偏移只应用一次，轨迹有限且时间严格递增，四元数单位范数误差小于 1e-5。各次前 128 帧和初始化 ±5 帧叠图齐全。详细汇总 `final_repeat_summary_v3.json`，交付独立核对 `final_acceptance_audit.json`。
 
 结果绝对目录：`/home/yuewang/Project/VSLAM/four_fisheye_rig/OpenMAVIS/results/repair_20260930T142226/`。每次目录保留 provenance.json、input_summary.json、settings.yaml、preparation.json、calibration_provenance/、working-tree.patch、build_provenance.json/build.patch/build_source_snapshot/、run.log、frames.csv、diagnostics.csv、tracking_events.csv、imu_events.csv、match_stages.csv、match_candidates.csv、overlays/、轨迹和 summary.json。v1/v2 失败结果原样保留。
+
+![开发包和独立包完整输入窗口的失败对照与最终三次复验状态时间线](/home/yuewang/Project/VSLAM/four_fisheye_rig/OpenMAVIS/results/repair_20260930T142226/report_figures_v2/05_tracking_timeline.png)
+
+**图 5：包含启动阶段的完整跟踪状态。** 读取每帧 `frames.csv`，开发对照为预先固定的第一轮射线基线 `E0_rays_1`，独立对照为完成全部输入但失败的 v1 第二轮 `E7_validation01_2`；v1 首轮在 2222 帧诊断异常退出，故没有作为完整时间线对照。每包另展示最终 v3 的全部三次复验，未截掉启动阶段。三角标记为首次 IMU 初始化，短竖线为重置计数增加；左侧比例是完整输入窗口 OK 比例。开发包最终全窗口为 94.81%，独立包为 76.11%，与初始化后 100% OK 的统计窗口不同。独立包约 24.23 秒才完成 IMU 初始化，9 次重置均在此前。
+
+![最终候选各相机局部优化后观测与帧末独立地图内点时间曲线](/home/yuewang/Project/VSLAM/four_fisheye_rig/OpenMAVIS/results/repair_20260930T142226/report_figures_v2/06_camera_support.png)
+
+**图 6：四路实际优化观测支持。** 固定读取最终各包第一次复验从首次 IMU 初始化起的 `diagnostics.csv`。彩色曲线为局部地图阶段 `local_after_cam0–3`，黑线为帧末 `unique_inliers`，二者统计对象不同；一地图点可有多路观测，不能直接求和比较。未执行阶段的负值保留为缺口，没有填成 0；所有曲线保留原始逐帧值，没有平滑。四路均持续提供优化后观测，轨迹精度仍须另行对真值评估。
 
 ## 最终源码、测试与构建
 
@@ -286,6 +312,30 @@ cd "$REPAIR_REPO"
 逐帧 `frames.csv` 中 `raw_ns`、`corrected_ns` 为整数纳秒，图像时间只加一次 2631359 ns。`trajectory_body.txt` / `keyframes_body.txt` 的格式为 `timestamp_s tx ty tz qx qy qz qw`，时间是校正后的设备时钟秒，不是 Unix 时间或纳秒。根据实际导出实现，位姿方向为 IMU/body 到参考世界坐标系：全帧轨迹以最大地图第一关键帧 body 为原点，关键帧轨迹使用该最大地图自身世界坐标系；直接叠加两文件前需要统一参考系。
 
 原导出器选择关键帧数最多的地图，并跳过标记 LOST 或属于其他地图的帧。RECENTLY_LOST 在已初始化时可能保留惯性预测位姿，也可能沿用参考位姿；不能把导出行数当作成功视觉跟踪帧数。开发包 1195 个处理帧、1133 个 OK 帧、1133 个导出行；独立包 2683 个处理帧、2042 个 OK 帧，但最大地图导出 2030 行，因为部分 OK 帧属于随后重置的启动地图。初始化后的有效跟踪比例与完整输入窗口比例分别报告。
+
+![两段数据最大地图的 IMU body 轨迹 XY 投影，不包含真值对齐](/home/yuewang/Project/VSLAM/four_fisheye_rig/OpenMAVIS/results/repair_20260930T142226/report_figures_v2/07_trajectory_xy.png)
+
+**图 7：导出轨迹的 XY 投影。** 读取最终各包第一次复验的 `trajectory_body.txt`，绘出全部 1133 / 2030 行，轴单位为米且 X/Y 等比例。两段分别使用各自最大地图第一关键帧 body 为原点的参考系，没有彼此对齐，也没有 mocap 对齐；XY 投影不等同于重力对齐的俯视图。相邻导出时间差超过中位帧间隔的 1.5 倍时不连线，避免跨缺失区段制造连续轨迹。该图只展示已导出的位姿形状，不证明绝对精度。
+
+## 配图来源与复现
+
+配图目录为 `results/repair_20260930T142226/report_figures_v2/`。统计图同时保存 PNG（180 dpi）和 SVG；两张诊断 JPEG 与源文件 SHA256 完全相同。绘制时核对逐帧索引及时间递增、轨迹有限性，逐张检查图例、中文标签和比例。首次绘制目录 `report_figures/` 也保留，第二次只调整图例位置与对照标签，没有改变数据。
+
+绘图脚本：[plot_layout0921_repair_validation.py](/home/yuewang/Project/VSLAM/four_fisheye_rig/OpenMAVIS/scripts/plot_layout0921_repair_validation.py)。[配图清单与输入哈希](/home/yuewang/Project/VSLAM/four_fisheye_rig/OpenMAVIS/results/repair_20260930T142226/report_figures_v2/figure_manifest.json) 保存脚本哈希、每个输入文件哈希、输出尺寸/哈希、字体及依赖版本；[图中数值](/home/yuewang/Project/VSLAM/four_fisheye_rig/OpenMAVIS/results/repair_20260930T142226/report_figures_v2/figure_data.json) 保存原始实验点和曲线计数。配图为已保存实验的重新展示，没有新增回放、算法修订或精度验收。
+
+[配图核对记录](/home/yuewang/Project/VSLAM/four_fisheye_rig/OpenMAVIS/results/repair_20260930T142226/report_figures_v2_audit.json)：7 个报告图片链接均可读取，38 个输入哈希和 12 个图像/SVG 输出哈希核对一致；匹配中位数、六次复验帧数/状态/重置、四路优化观测累计及轨迹行数与上述表格一致。已存在输出目录的运行被拒绝，清单未被覆盖；原实验输入未改变。`git diff --check` 通过。
+
+本次使用独立临时绘图环境 `/tmp/openmavis-report-plot-20260930/bin/python`，Matplotlib 3.10.6、NumPy 2.2.6、Pillow 11.3.0，没有修改 SLAM 运行环境。复现时可将 `REPAIR_PLOT_PYTHON` 替换为安装这三项依赖的 Python；默认中文字体为 `/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc`，可用 `--font` 指定。输出目录已存在时明确拒绝覆盖：
+
+```bash
+cd /home/yuewang/Project/VSLAM/four_fisheye_rig/OpenMAVIS
+REPAIR_PLOT_PYTHON=/tmp/openmavis-report-plot-20260930/bin/python
+REPAIR_FIGURES="$PWD/results/repair_20260930T142226/report_figures_$(date +%Y%m%dT%H%M%S)"
+MPLCONFIGDIR=/tmp/openmavis-report-mpl-cache "$REPAIR_PLOT_PYTHON" scripts/plot_layout0921_repair_validation.py \
+  --experiment-root "$PWD/results/repair_20260930T142226" --output "$REPAIR_FIGURES"
+```
+
+生成图像及清单仍放在被忽略的 `results/`，不加入版本控制。报告图片使用本机绝对路径，移动或分享文档时需一并携带配图并改写链接。
 
 ## 保留的限制
 
