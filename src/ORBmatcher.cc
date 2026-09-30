@@ -2047,6 +2047,8 @@ namespace ORB_SLAM3
 
     int ORBmatcher::SearchByProjection(Frame &CurrentFrame, const Frame &LastFrame, const float th, const bool bMono)
     {
+        if(CurrentFrame.is_multi_rig && CurrentFrame.multi_projection_level >= 3)
+            return SearchByProjectionMulti(CurrentFrame, LastFrame, th, bMono);
         int nmatches = 0;
 
         // Rotation Histogram (to check rotation consistency)
@@ -2174,7 +2176,7 @@ namespace ORB_SLAM3
                     }
                     if(CurrentFrame.Nleft != -1){
                         Eigen::Vector3f x3Dr = CurrentFrame.GetRelativePoseTrl() * x3Dc;
-                        Eigen::Vector2f uv = CurrentFrame.mpCamera->project(x3Dr);
+                        Eigen::Vector2f uv = (CurrentFrame.is_multi_rig && CurrentFrame.multi_projection_level >= 1 ? CurrentFrame.mpCamera2 : CurrentFrame.mpCamera)->project(x3Dr);
 
                         int nLastOctave = (LastFrame.Nleft == -1 || i < LastFrame.Nleft) ? LastFrame.mvKeys[i].octave
                                         : (i >= LastFrame.Nleft && i < LastFrame.Nleft + LastFrame.Nright) ? LastFrame.mvKeysRight[i - LastFrame.Nleft].octave
@@ -2263,13 +2265,14 @@ namespace ORB_SLAM3
                         for (int flag = 2; flag < 4; flag++)
                         {
                             vector<size_t> vIndices2;
+                            const Eigen::Vector2f side_uv = CurrentFrame.multi_projection_level >= 2 ? (flag == 2 ? uvsl : uvsr) : uv;
 
                             if (bForward)
-                                vIndices2 = CurrentFrame.GetFeaturesInArea(uv(0), uv(1), radius, nLastOctave, -1, flag);
+                                vIndices2 = CurrentFrame.GetFeaturesInArea(side_uv(0), side_uv(1), radius, nLastOctave, -1, flag);
                             else if (bBackward)
-                                vIndices2 = CurrentFrame.GetFeaturesInArea(uv(0), uv(1), radius, 0, nLastOctave, flag);
+                                vIndices2 = CurrentFrame.GetFeaturesInArea(side_uv(0), side_uv(1), radius, 0, nLastOctave, flag);
                             else
-                                vIndices2 = CurrentFrame.GetFeaturesInArea(uv(0), uv(1), radius, nLastOctave - 1, nLastOctave + 1, flag);
+                                vIndices2 = CurrentFrame.GetFeaturesInArea(side_uv(0), side_uv(1), radius, nLastOctave - 1, nLastOctave + 1, flag);
 
                             const cv::Mat dMP = pMP->GetDescriptor();
 
@@ -2396,6 +2399,76 @@ namespace ORB_SLAM3
         }
 
         return nmatches;
+    }
+
+    int ORBmatcher::SearchByProjectionMulti(Frame &current, const Frame &last, const float th, const bool bMono)
+    {
+        // Each camera has its own visibility, model and window. A missing front
+        // observation must never suppress a side observation of the same point.
+        const int offsets[] = {0, current.Nleft, current.Nleft+current.Nright,
+                               current.Nleft+current.Nright+current.Nsideleft};
+        GeometricCamera* cameras[] = {current.mpCamera,current.mpCamera2,current.mpCamera3,current.mpCamera4};
+        const Sophus::SE3f relative[] = {Sophus::SE3f(),current.GetRelativePoseTrl(),
+                                       current.GetRelativePoseTsll(),current.GetRelativePoseTsrl()};
+        const std::vector<cv::KeyPoint>* keys[] = {&current.mvKeys,&current.mvKeysRight,&current.mvKeysSideLeft,&current.mvKeysSideRight};
+        auto lastKey = [&](int i)->const cv::KeyPoint& {
+            if(i<last.Nleft) return last.mvKeys[i];
+            if(i<last.Nleft+last.Nright) return last.mvKeysRight[i-last.Nleft];
+            if(i<last.Nleft+last.Nright+last.Nsideleft) return last.mvKeysSideLeft[i-last.Nleft-last.Nright];
+            return last.mvKeysSideRight[i-last.Nleft-last.Nright-last.Nsideleft];
+        };
+        std::vector<int> histogram[HISTO_LENGTH];
+        const float factor=1.0f/HISTO_LENGTH;
+        const auto Tcw=current.GetPose();
+        const Eigen::Vector3f motion=last.GetPose()*Tcw.inverse().translation();
+        const bool forward=motion.z()>current.mb && !bMono, backward=-motion.z()>current.mb && !bMono;
+        std::set<MapPoint*> visited;
+        int matches=0;
+        for(int i=0;i<last.N;++i) {
+            MapPoint* point=last.mvpMapPoints[i];
+            if(!point || last.mvbOutlier[i] || !visited.insert(point).second) continue;
+            const auto& previous=lastKey(i);
+            const float radius=th*current.mvScaleFactors[previous.octave];
+            const Eigen::Vector3f front=Tcw*point->GetWorldPos();
+            const cv::Mat descriptor=point->GetDescriptor();
+            for(int c=0;c<4;++c) {
+                const Eigen::Vector3f p=relative[c]*front;
+                if(!p.allFinite() || p.z()<=0) continue;
+                const Eigen::Vector2f uv=cameras[c]->project(p);
+                if(!uv.allFinite() || uv.x()<current.mnMinX || uv.x()>=current.mnMaxX || uv.y()<current.mnMinY || uv.y()>=current.mnMaxY) continue;
+                if(current.multi_diagnostics) ++current.motion_visible[c];
+                const auto candidates=current.GetFeaturesInArea(uv.x(),uv.y(),radius,
+                    backward?0:(forward?previous.octave:previous.octave-1),forward?-1:previous.octave+1,c);
+                if(current.multi_diagnostics) current.motion_candidates[c]+=candidates.size();
+                int best=-1,distance=256;
+                for(auto local:candidates) {
+                    const int global=offsets[c]+local;
+                    if(current.mvpMapPoints[global]) continue;
+                    const int d=DescriptorDistance(descriptor,current.mDescriptors.row(global));
+                    if(d<distance) {distance=d;best=local;}
+                }
+                if(best<0 || distance>TH_HIGH) continue;
+                const int global=offsets[c]+best;
+                current.mvpMapPoints[global]=point; ++matches;
+                if(mbCheckOrientation) {
+                    float angle=previous.angle-(*keys[c])[best].angle;
+                    if(angle<0) angle+=360;
+                    int bin=round(angle*factor); if(bin==HISTO_LENGTH) bin=0;
+                    histogram[bin].push_back(global);
+                }
+            }
+        }
+        if(mbCheckOrientation) {
+            int a=-1,b=-1,c=-1; ComputeThreeMaxima(histogram,HISTO_LENGTH,a,b,c);
+            for(int bin=0;bin<HISTO_LENGTH;++bin) if(bin!=a && bin!=b && bin!=c)
+                for(int index:histogram[bin]) {current.mvpMapPoints[index]=nullptr;--matches;}
+        }
+        if(current.multi_diagnostics) {
+            current.motion_matches.fill(0);
+            for(int c=0;c<4;++c) for(size_t i=0;i<keys[c]->size();++i)
+                current.motion_matches[c]+=current.mvpMapPoints[offsets[c]+i]!=nullptr;
+        }
+        return matches;
     }
 
     int ORBmatcher::SearchByProjection(Frame &CurrentFrame, KeyFrame *pKF, const set<MapPoint*> &sAlreadyFound, const float th , const int ORBdist)

@@ -59,6 +59,10 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
     cv::FileStorage preparedSettings(strSettingPath, cv::FileStorage::READ);
     filter_invalid_rays = !preparedSettings["Camera.filterInvalidRays"].empty() &&
                           int(preparedSettings["Camera.filterInvalidRays"]) != 0;
+    if(!preparedSettings["Multi.ProjectionFixLevel"].empty())
+        multi_projection_level = int(preparedSettings["Multi.ProjectionFixLevel"]);
+    if(multi_projection_level<0 || multi_projection_level>3)
+        throw std::runtime_error("Multi.ProjectionFixLevel must be 0..3");
     // Load camera parameters from settings file
     if(settings){
         newParameterLoader(settings);
@@ -1598,6 +1602,7 @@ Sophus::SE3f Tracking::GrabImageMulti(const cv::Mat &imRectLeft, const cv::Mat &
                               mpORBextractorLeft,mpORBextractorRight,mpORBextractorSideLeft,mpORBextractorSideRight,mbleft, mbright, mbsideleft, mbsideright,
                               mpORBVocabulary,mK,mDistCoef,mbf,mThDepth,mpCamera,mpCamera2,mpCamera3,mpCamera4,mTlr,mTlsl,mTlsr,&mLastFrame,*mpImuCalib,filter_invalid_rays);
 
+    mCurrentFrame.multi_projection_level = multi_projection_level;
     mCurrentFrame.multi_diagnostics = multi_diagnostics.load();
     reference_matches.fill(-1); local_before.fill(-1); local_after.fill(-1); stage_success.fill(-1);
     residual_before.fill(0); residual_after.fill(0);
@@ -1727,7 +1732,7 @@ void Tracking::GrabImuData(const IMU::Point &imuMeasurement)
 void Tracking::PreintegrateIMU()
 {
 
-    if(!mCurrentFrame.mpPrevFrame)
+    if(!mCurrentFrame.mpPrevFrame || !std::isfinite(mCurrentFrame.mpPrevFrame->mTimeStamp))
     {
         Verbose::PrintMess("non prev frame ", Verbose::VERBOSITY_NORMAL);
         mCurrentFrame.setIntegrated();
@@ -1738,9 +1743,8 @@ void Tracking::PreintegrateIMU()
     mvImuFromLastFrame.reserve(mlQueueImuData.size());
     if(mlQueueImuData.size() == 0)
     {
-        Verbose::PrintMess("Not IMU data in mlQueueImuData!!", Verbose::VERBOSITY_NORMAL);
         mCurrentFrame.setIntegrated();
-        return;
+        throw std::runtime_error("No IMU data for a valid frame interval");
     }
 
     while(true)
@@ -1777,11 +1781,12 @@ void Tracking::PreintegrateIMU()
             usleep(500);
     }
 
-    const int n = mvImuFromLastFrame.size()-1;
-    if(n==0){
-        cout << "Empty IMU measurements vector!!!\n";
-        return;
+    if(mvImuFromLastFrame.size()<2){
+        mCurrentFrame.setIntegrated();
+        throw std::runtime_error("At least two IMU boundary samples are required for a valid frame interval");
     }
+    const int n = int(mvImuFromLastFrame.size())-1;
+    if(!mpImuPreintegratedFromLastKF) throw std::runtime_error("Missing keyframe preintegrator");
 
     IMU::Preintegrated* pImuPreintegratedFromLastFrame = new IMU::Preintegrated(mLastFrame.mImuBias,mCurrentFrame.mImuCalib);
 

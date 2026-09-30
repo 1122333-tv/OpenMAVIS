@@ -204,15 +204,23 @@ void Preintegrated::IntegrateNewMeasurement(const Eigen::Vector3f &acceleration,
     // Update delta position dP and velocity dV (rely on no-updated delta rotation)
     // Improved IMU Pre-integration
     Eigen::Matrix<float,3,3> J1, J2;
-    float theta = accW.norm();
-    float theta2 = theta*theta;
-    float theta3 = theta2*theta;
-    float theta4 = theta3*theta;
-    Eigen::Matrix<float,3,3> WaccW = Sophus::SO3f::hat(accW);
-    Eigen::Matrix<float,3,3> WaccW2 = WaccW*WaccW;
-
-    J1 = dt*Eigen::Matrix3f::Identity() + (1.0f - cos(dt*theta))/(theta2)*WaccW + (dt*theta - sin(dt*theta))/(theta3)*WaccW2;
-    J2 = 0.5f*dt*dt*Eigen::Matrix3f::Identity() + (dt*theta - sin(dt*theta))/(theta3)*WaccW + (0.5f*dt*dt*theta2 + cos(dt*theta) - 1)/(theta4)*WaccW2;
+    // Dimensionless rotation avoids division by zero at rest and cancellation
+    // of cos(x)-1 for typical high-rate IMU samples. These are the exact
+    // constant angular-rate integrals, with their analytic small-angle limit.
+    const double x = double(dt)*accW.cast<double>().norm(), x2=x*x;
+    double a,bj,c;
+    if(std::abs(x)<.01) {
+        a=.5-x2/24+x2*x2/720;
+        bj=1./6-x2/120+x2*x2/5040;
+        c=1./24-x2/720+x2*x2/40320;
+    } else {
+        a=(1-std::cos(x))/x2;
+        bj=(x-std::sin(x))/(x2*x);
+        c=(.5*x2+std::cos(x)-1)/(x2*x2);
+    }
+    const Eigen::Matrix3f Wdt=Sophus::SO3f::hat(Eigen::Vector3f(accW*dt)), Wdt2=Wdt*Wdt;
+    J1=dt*(Eigen::Matrix3f::Identity()+float(a)*Wdt+float(bj)*Wdt2);
+    J2=dt*dt*(.5f*Eigen::Matrix3f::Identity()+float(bj)*Wdt+float(c)*Wdt2);
     dP = dP + dV*dt + dR*J2*acc; // 0.5f*dR*acc*dt*dt;
     dV = dV + dR*J1*acc; // dR*acc*dt;
 

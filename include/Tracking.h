@@ -109,6 +109,7 @@ public:
     int GetMatchesInliers();
     unsigned long reset_count = 0;
     bool filter_invalid_rays = false;
+    int multi_projection_level = 3;
     std::atomic<bool> multi_diagnostics{false};
     std::array<int,3> stage_success{{-1,-1,-1}};
     std::array<int,4> reference_matches{{-1,-1,-1,-1}}, local_before{{-1,-1,-1,-1}}, local_after{{-1,-1,-1,-1}};

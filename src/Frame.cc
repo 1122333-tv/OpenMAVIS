@@ -32,6 +32,7 @@
 #include "GeometricCamera.h"
 
 #include <thread>
+#include <limits>
 #include <include/CameraModels/Pinhole.h>
 #include <include/CameraModels/KannalaBrandt8.h>
 
@@ -49,6 +50,10 @@ cv::BFMatcher Frame::BFmatcher = cv::BFMatcher(cv::NORM_HAMMING);
 
 Frame::Frame(): mpcpi(NULL), mpImuPreintegrated(NULL), mpPrevFrame(NULL), mpImuPreintegratedFrame(NULL), mpReferenceKF(static_cast<KeyFrame*>(NULL)), mbIsSet(false), mbImuPreintegrated(false), mbHasPose(false), mbHasVelocity(false)
 {
+    // A reset frame is not an exposure at device time zero.
+    mTimeStamp=std::numeric_limits<double>::quiet_NaN();
+    mnId=0; N=0; Nleft=Nright=Nsideleft=Nsideright=0;
+    mpLastKeyFrame=nullptr; mpMutexImu=nullptr;
 #ifdef REGISTER_TIMES
     mTimeStereoMatch = 0;
     mTimeORB_Ext = 0;
@@ -1530,6 +1535,7 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, const cv::Mat &imSid
          mbHasPose(false), mbHasVelocity(false)
 
 {
+    is_multi_rig = true;
     imgLeft = imLeft.clone();
     imgRight = imRight.clone();
     imgSideLeft = imSideLeft.clone();
