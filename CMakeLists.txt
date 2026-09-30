@@ -61,6 +61,7 @@ src/Map.cc
 src/MapDrawer.cc
 src/Optimizer.cc
 src/Frame.cc
+src/RigMatching.cc
 src/KeyFrameDatabase.cc
 src/Sim3Solver.cc
 src/Viewer.cc
@@ -401,7 +402,6 @@ target_link_libraries(prepared_match_audit ${PROJECT_NAME})
 
 add_executable(multi_regression Examples/Multi-Inertial/multi_regression.cc)
 target_link_libraries(multi_regression ${PROJECT_NAME})
-target_compile_definitions(multi_regression PRIVATE BASELINE_ABI)
 if(OPENMAVIS_SANITIZE)
   foreach(t ORB_SLAM3 multi_regression)
     target_compile_options(${t} PRIVATE -O1 -g1 -fsanitize=address,undefined -fno-omit-frame-pointer)

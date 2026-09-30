@@ -43,8 +43,8 @@
 
 #include "GeometricCamera.h"
 
-#include <atomic>
 #include <mutex>
+#include <atomic>
 #include <unordered_set>
 
 namespace ORB_SLAM3
@@ -110,13 +110,17 @@ public:
     unsigned long reset_count = 0;
     bool filter_invalid_rays = false;
     int multi_projection_level = 3;
+    bool geometric_rig_matches = false;
+    std::vector<std::pair<int,int>> rig_seed_pairs{{0,1}};
+    int rig_init_min_points=0, rig_init_min_cells=0;
+    bool rig_bootstrap_require_ok=false;
+    void InsertRigSeeds(KeyFrame* keyframe);
     std::atomic<bool> multi_diagnostics{false};
     std::array<int,3> stage_success{{-1,-1,-1}};
     std::array<int,4> reference_matches{{-1,-1,-1,-1}}, local_before{{-1,-1,-1,-1}}, local_after{{-1,-1,-1,-1}};
     std::array<double,4> residual_before{{0,0,0,0}}, residual_after{{0,0,0,0}};
     void CaptureMultiStage(std::array<int,4>& counts, std::array<double,4>* residual=nullptr);
     void RecordMultiEvent(const std::string& reason);
-
 
     //DEBUG
     void SaveSubTrajectory(string strNameFile_frames, string strNameFile_kf, string strFolder="");

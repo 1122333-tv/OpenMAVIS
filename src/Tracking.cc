@@ -63,6 +63,21 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
         multi_projection_level = int(preparedSettings["Multi.ProjectionFixLevel"]);
     if(multi_projection_level<0 || multi_projection_level>3)
         throw std::runtime_error("Multi.ProjectionFixLevel must be 0..3");
+    geometric_rig_matches=!preparedSettings["Multi.GeometricMatches"].empty() && int(preparedSettings["Multi.GeometricMatches"])!=0;
+    if(!preparedSettings["Multi.InitMinPoints"].empty()) rig_init_min_points=int(preparedSettings["Multi.InitMinPoints"]);
+    if(!preparedSettings["Multi.InitMinGridCells"].empty()) rig_init_min_cells=int(preparedSettings["Multi.InitMinGridCells"]);
+    rig_bootstrap_require_ok=!preparedSettings["Multi.BootstrapRequireOK"].empty() && int(preparedSettings["Multi.BootstrapRequireOK"])!=0;
+    if(rig_init_min_points<0 || rig_init_min_cells<0 || rig_init_min_cells>12) throw std::runtime_error("Invalid multi initialization gate");
+    if(!preparedSettings["Multi.SeedPairs"].empty()) {
+        std::vector<int> values;preparedSettings["Multi.SeedPairs"]>>values;
+        if(values.empty() || values.size()%2) throw std::runtime_error("Multi.SeedPairs needs camera index pairs");
+        rig_seed_pairs.clear();std::set<std::pair<int,int>> unique;
+        for(size_t i=0;i<values.size();i+=2) {
+            if(values[i]<0 || values[i]>=4 || values[i+1]<0 || values[i+1]>=4 || values[i]>=values[i+1] || !unique.insert({values[i],values[i+1]}).second)
+                throw std::runtime_error("Invalid/repeated multi seed camera pair");
+            rig_seed_pairs.emplace_back(values[i],values[i+1]);
+        }
+    }
     // Load camera parameters from settings file
     if(settings){
         newParameterLoader(settings);
@@ -1602,6 +1617,7 @@ Sophus::SE3f Tracking::GrabImageMulti(const cv::Mat &imRectLeft, const cv::Mat &
                               mpORBextractorLeft,mpORBextractorRight,mpORBextractorSideLeft,mpORBextractorSideRight,mbleft, mbright, mbsideleft, mbsideright,
                               mpORBVocabulary,mK,mDistCoef,mbf,mThDepth,mpCamera,mpCamera2,mpCamera3,mpCamera4,mTlr,mTlsl,mTlsr,&mLastFrame,*mpImuCalib,filter_invalid_rays);
 
+    if(geometric_rig_matches) mCurrentFrame.ComputeRigMatches(rig_seed_pairs);
     mCurrentFrame.multi_projection_level = multi_projection_level;
     mCurrentFrame.multi_diagnostics = multi_diagnostics.load();
     reference_matches.fill(-1); local_before.fill(-1); local_after.fill(-1); stage_success.fill(-1);
@@ -2552,6 +2568,7 @@ void Tracking::StereoInitialization()
 
 void Tracking::MultiInitialization()
 {
+    if(rig_init_min_points>0 && !mCurrentFrame.RigInitializationReady(rig_init_min_points,rig_init_min_cells)) return;
     if(mCurrentFrame.N>500)
     {
         if (!mCurrentFrame.mpImuPreintegrated || !mLastFrame.mpImuPreintegrated)
@@ -2578,7 +2595,8 @@ void Tracking::MultiInitialization()
         // Insert KeyFrame in the map
         mpAtlas->AddKeyFrame(pKFini);
 
-        for (int i = 0; i < mCurrentFrame.Nleft; i++)
+        if(mCurrentFrame.rig_matches_enabled) InsertRigSeeds(pKFini);
+        else for (int i = 0; i < mCurrentFrame.Nleft; i++)
         {
             int rightIndex = mCurrentFrame.mvLeftToRightMatch[i];
             if (rightIndex != -1)
@@ -3259,6 +3277,12 @@ bool Tracking::TrackLocalMap()
 
 bool Tracking::NeedNewKeyFrame()
 {
+    // A pre-initialization RECENTLY_LOST frame can have no estimated pose.
+    // It must not contribute an identity/uninitialized pose to IMU bootstrap.
+    if(mSensor==System::IMU_MULTI && rig_bootstrap_require_ok) {
+        if(!mCurrentFrame.HasPose()) return false;
+        if(!mpAtlas->GetCurrentMap()->isImuInitialized() && mState!=OK) return false;
+    }
     if((mSensor == System::IMU_MONOCULAR || mSensor == System::IMU_STEREO || mSensor == System::IMU_RGBD || mSensor == System::IMU_MULTI) && !mpAtlas->GetCurrentMap()->isImuInitialized())
     {
         if (mSensor == System::IMU_MONOCULAR && (mCurrentFrame.mTimeStamp-mpLastKeyFrame->mTimeStamp)>=0.25)
@@ -3441,7 +3465,8 @@ void Tracking::CreateNewKeyFrame()
         mpImuPreintegratedFromLastKF = new IMU::Preintegrated(pKF->GetImuBias(),pKF->mImuCalib);
     }
 
-    if(mSensor!=System::MONOCULAR && mSensor != System::IMU_MONOCULAR) // TODO check if incluide imu_stereo
+    if(mCurrentFrame.rig_matches_enabled) InsertRigSeeds(pKF);
+    if(!mCurrentFrame.rig_matches_enabled && mSensor!=System::MONOCULAR && mSensor != System::IMU_MONOCULAR) // TODO check if incluide imu_stereo
     {
         mCurrentFrame.UpdatePoseMatrices();
         // cout << "create new MPs" << endl;
@@ -4355,5 +4380,45 @@ void Tracking::RecordMultiEvent(const std::string& reason) {
     if(out.tellp()==0) out<<"time,frame,event,map,keyframes,points,resets,state,pose_valid,imu_initialized\n";
     Map* map=mpAtlas->GetCurrentMap();
     out<<std::setprecision(17)<<mCurrentFrame.mTimeStamp<<','<<mCurrentFrame.mnId<<','<<reason<<','<<map->GetId()<<','<<map->KeyFramesInMap()<<','<<map->MapPointsInMap()<<','<<reset_count<<','<<mState<<','<<mCurrentFrame.HasPose()<<','<<map->isImuInitialized()<<std::endl;
+}
+}
+
+namespace ORB_SLAM3 {
+void Tracking::InsertRigSeeds(KeyFrame* keyframe) {
+    const int offsets[]={0,mCurrentFrame.Nleft,mCurrentFrame.Nleft+mCurrentFrame.Nright,mCurrentFrame.Nleft+mCurrentFrame.Nright+mCurrentFrame.Nsideleft};
+    const Sophus::SE3f poses[]={Sophus::SE3f(),mCurrentFrame.GetRelativePoseTlr(),mCurrentFrame.GetRelativePoseTlsl(),mCurrentFrame.GetRelativePoseTlsr()};
+    GeometricCamera* cameras[]={mCurrentFrame.mpCamera,mCurrentFrame.mpCamera2,mCurrentFrame.mpCamera3,mCurrentFrame.mpCamera4};
+    const std::vector<cv::KeyPoint>* keys[]={&mCurrentFrame.mvKeys,&mCurrentFrame.mvKeysRight,&mCurrentFrame.mvKeysSideLeft,&mCurrentFrame.mvKeysSideRight};
+    for(const auto& seed:mCurrentFrame.rig_seeds) {
+        MapPoint* point=nullptr;bool conflict=false;
+        for(int idx:seed.indices) if(idx>=0) {
+            MapPoint* existing=mCurrentFrame.mvpMapPoints[idx];
+            if(existing && !existing->isBad() && existing->Observations()>0) {
+                if(point && point!=existing) conflict=true;
+                point=existing;
+            }
+        }
+        if(conflict) continue;
+        if(point) {
+            const auto indices=point->GetIndexInKeyFrame(keyframe);
+            const int previous[]={std::get<0>(indices),std::get<1>(indices),std::get<2>(indices),std::get<3>(indices)};
+            const Eigen::Vector3f pc0=mCurrentFrame.GetPose()*point->GetWorldPos();
+            for(int c=0;c<4;++c) if(seed.indices[c]>=0) {
+                const auto& key=(*keys[c])[seed.indices[c]-offsets[c]];
+                const Eigen::Vector3f pc=poses[c].inverse()*pc0;
+                const Eigen::Vector2f uv=cameras[c]->project(pc);
+                if(previous[c]>=0 && previous[c]!=seed.indices[c]) conflict=true;
+                if(!pc.allFinite() || pc.z()<=0 || !uv.allFinite() || (uv-Eigen::Vector2f(key.pt.x,key.pt.y)).squaredNorm()>5.991*mCurrentFrame.mvLevelSigma2[key.octave]) conflict=true;
+            }
+            if(conflict) continue;
+        } else {
+            point=new MapPoint(mCurrentFrame.GetPose().inverse()*seed.point,keyframe,mpAtlas->GetCurrentMap());
+            mpAtlas->AddMapPoint(point);
+        }
+        for(int idx:seed.indices) if(idx>=0) {
+            point->AddObservation(keyframe,idx);keyframe->AddMapPoint(point,idx);mCurrentFrame.mvpMapPoints[idx]=point;
+        }
+        point->ComputeDistinctiveDescriptors();point->UpdateNormalAndDepth();
+    }
 }
 }
