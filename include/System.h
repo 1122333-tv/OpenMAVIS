@@ -193,7 +193,14 @@ public:
         unsigned long map_id, resets;
         int stereo_matches, inliers;
         bool imu_initialized;
+        int motion_visible[4], motion_candidates[4], motion_matches[4];
+        int local_visible[4], local_candidates[4], stage_success[3];
+        int reference_matches[4], local_before[4], local_after[4], unique_inliers;
+        double residual_before[4], residual_after[4], preintegration_dt;
+        int rig_seeds;
     };
+    void EnableMultiDiagnostics(bool enabled);
+    void SaveMultiDiagnostics(unsigned long frame);
     MultiDiagnostics GetMultiDiagnostics();
     std::vector<MapPoint*> GetTrackedMapPoints();
     std::vector<cv::KeyPoint> GetTrackedKeyPointsUn();

@@ -43,6 +43,7 @@
 
 #include "GeometricCamera.h"
 
+#include <atomic>
 #include <mutex>
 #include <unordered_set>
 
@@ -108,6 +109,13 @@ public:
     int GetMatchesInliers();
     unsigned long reset_count = 0;
     bool filter_invalid_rays = false;
+    std::atomic<bool> multi_diagnostics{false};
+    std::array<int,3> stage_success{{-1,-1,-1}};
+    std::array<int,4> reference_matches{{-1,-1,-1,-1}}, local_before{{-1,-1,-1,-1}}, local_after{{-1,-1,-1,-1}};
+    std::array<double,4> residual_before{{0,0,0,0}}, residual_after{{0,0,0,0}};
+    void CaptureMultiStage(std::array<int,4>& counts, std::array<double,4>* residual=nullptr);
+    void RecordMultiEvent(const std::string& reason);
+
 
     //DEBUG
     void SaveSubTrajectory(string strNameFile_frames, string strNameFile_kf, string strFolder="");

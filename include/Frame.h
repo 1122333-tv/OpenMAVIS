@@ -25,6 +25,7 @@
 #define FRAME_H
 
 #include<vector>
+#include<array>
 
 #include "Thirdparty/DBoW2/DBoW2/BowVector.h"
 #include "Thirdparty/DBoW2/DBoW2/FeatureVector.h"
@@ -408,6 +409,32 @@ public:
 
     //Stereo fisheye
     void ComputeMultiFishEyeMatches();
+
+    // 0: legacy, 1: right model, 2: side windows, 3: independent camera searches.
+    // Intermediate levels are explicit experiment controls, not automatic fallbacks.
+    int multi_projection_level = 3;
+    bool is_multi_rig = false;
+    bool multi_diagnostics = false;
+    std::array<int,4> motion_visible{{0,0,0,0}}, motion_candidates{{0,0,0,0}};
+    std::array<int,4> motion_matches{{0,0,0,0}};
+    std::array<int,4> local_visible{{0,0,0,0}}, local_candidates{{0,0,0,0}};
+    struct RigSeed {
+        Eigen::Vector3f point; // cam0 coordinates; may have negative cam0 z
+        std::array<int,4> indices{{-1,-1,-1,-1}}; // global descriptor indices
+        double error=0;
+    };
+    struct RigMatchStats {
+        int a=0,b=1,queries=0,no_geometry=0,ratio=0,hamming=0,mutual=0;
+        int singleton=0,accepted=0,invalid=0;
+        std::array<int,5> geometry{{0,0,0,0,0}};
+    };
+    std::vector<RigSeed> rig_seeds;
+    std::vector<RigMatchStats> rig_match_stats;
+    struct RigCandidate {int a,b,ia,ib,reason,distance;};
+    std::vector<RigCandidate> rig_candidates;
+    bool rig_matches_enabled = false;
+    void ComputeRigMatches(const std::vector<std::pair<int,int>>& pairs);
+    bool RigInitializationReady(int minPoints,int minCells) const;
 
     // change boolean to int for support multiple cameras
     bool isInFrustumChecks(MapPoint* pMP, float viewingCosLimit, int selectedCamera = 0);

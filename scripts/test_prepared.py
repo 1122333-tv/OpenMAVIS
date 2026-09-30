@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import json,subprocess,tempfile,unittest
+import json,subprocess,tempfile,unittest,os
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 class PreparedInputs(unittest.TestCase):
@@ -11,7 +11,7 @@ class PreparedInputs(unittest.TestCase):
             for n in ['a','b']:(p/f'data/{n}.ppm').write_bytes(b'P6\n1280 800\n255\n'+bytes([80,100,120])*(1280*800))
         p=self.data/'mav0/imu0';p.mkdir();(p/'data.csv').write_text('#timestamp,wx,wy,wz,ax,ay,az\n'+''.join(f'{t},0,0,0,0,0,-9.81\n' for t in range(900000000,1100000001,2000000)))
     def run_case(self,error=None,extra=()):
-        cmd=[str(ROOT/'Examples/Multi-Inertial/multi_inertial_prepared'),'--vocabulary',str(ROOT/'Vocabulary/ORBvoc.txt'),'--settings',str(ROOT/'Examples/Multi-Inertial/OAK4P_layout0921.yaml'),'--dataset',str(self.data),'--output',str(self.root/'out'),'--cam-time-offset-ns','2631359','--validate-only',*extra]
+        cmd=[os.environ.get('OPENMAVIS_TEST_BINARY',str(ROOT/'Examples/Multi-Inertial/multi_inertial_prepared')),'--vocabulary',str(ROOT/'Vocabulary/ORBvoc.txt'),'--settings',str(ROOT/'Examples/Multi-Inertial/OAK4P_layout0921.yaml'),'--dataset',str(self.data),'--output',str(self.root/'out'),'--cam-time-offset-ns','2631359','--validate-only',*extra]
         p=subprocess.run(cmd,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
         if error:self.assertNotEqual(p.returncode,0,p.stdout);self.assertIn(error,p.stdout)
         else:self.assertEqual(p.returncode,0,p.stdout)
@@ -30,6 +30,10 @@ class PreparedInputs(unittest.TestCase):
         p=self.data/'mav0/imu0/data.csv';p.write_text('#header\n900000000,0,0,0,0,0,-9.81\n1000000000,0,0,0,0,0,-9.81\n');self.run_case('IMU does not cover')
     def test_empty(self):
         (self.data/'mav0/cam0/data.csv').write_text('#header\n');self.run_case('Empty CSV')
+    def test_empty_imu(self):
+        (self.data/'mav0/imu0/data.csv').write_text('#header\n');self.run_case('Empty CSV')
+    def test_single_imu(self):
+        (self.data/'mav0/imu0/data.csv').write_text('#header\n1000000000,0,0,0,0,0,-9.81\n');self.run_case('IMU does not cover')
     def test_nonfinite_imu(self):
         p=self.data/'mav0/imu0/data.csv';p.write_text(p.read_text().replace('-9.81','nan'));self.run_case('Invalid IMU value')
     def test_duplicate_imu(self):

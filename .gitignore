@@ -99,3 +99,9 @@ Examples/Multi-Inertial/multi_inertial_prepared
 Examples/Multi-Inertial/prepared_camera_audit
 
 Examples/Multi-Inertial/prepared_match_audit
+
+build-asan/
+Examples/Multi-Inertial/multi_regression
+/build_provenance.json
+/build.patch
+/build_source_snapshot/

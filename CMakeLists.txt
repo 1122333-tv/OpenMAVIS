@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.10)
 project(ORB_SLAM3)
+option(OPENMAVIS_SANITIZE "Enable address and undefined behavior sanitizers" OFF)
+
 
 IF(NOT CMAKE_BUILD_TYPE)
   SET(CMAKE_BUILD_TYPE Release)
@@ -40,7 +42,8 @@ ${EIGEN3_INCLUDE_DIR}
 ${Pangolin_INCLUDE_DIRS}
 )
 
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
+set(OPENMAVIS_OUTPUT_ROOT "${PROJECT_SOURCE_DIR}" CACHE PATH "Library and example output root")
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${OPENMAVIS_OUTPUT_ROOT}/lib)
 
 add_library(${PROJECT_NAME} SHARED
 src/System.cc
@@ -128,7 +131,7 @@ endif()
 # Build examples
 
 # RGB-D examples
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/RGB-D)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${OPENMAVIS_OUTPUT_ROOT}/Examples/RGB-D)
 
 add_executable(rgbd_tum
         Examples/RGB-D/rgbd_tum.cc)
@@ -142,7 +145,7 @@ endif()
 
 
 # RGB-D inertial examples
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/RGB-D-Inertial)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${OPENMAVIS_OUTPUT_ROOT}/Examples/RGB-D-Inertial)
 
 if(realsense2_FOUND)
     add_executable(rgbd_inertial_realsense_D435i
@@ -151,7 +154,7 @@ if(realsense2_FOUND)
 endif()
 
 #Stereo examples
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/Stereo)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${OPENMAVIS_OUTPUT_ROOT}/Examples/Stereo)
 
 add_executable(stereo_kitti
         Examples/Stereo/stereo_kitti.cc)
@@ -176,7 +179,7 @@ if(realsense2_FOUND)
 endif()
 
 #Monocular examples
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/Monocular)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${OPENMAVIS_OUTPUT_ROOT}/Examples/Monocular)
 
 add_executable(mono_tum
         Examples/Monocular/mono_tum.cc)
@@ -205,7 +208,7 @@ if(realsense2_FOUND)
 endif()
 
 #Monocular inertial examples
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/Monocular-Inertial)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${OPENMAVIS_OUTPUT_ROOT}/Examples/Monocular-Inertial)
 
 add_executable(mono_inertial_euroc
         Examples/Monocular-Inertial/mono_inertial_euroc.cc)
@@ -226,7 +229,7 @@ if(realsense2_FOUND)
 endif()
 
 #Stereo Inertial examples
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/Stereo-Inertial)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${OPENMAVIS_OUTPUT_ROOT}/Examples/Stereo-Inertial)
 
 add_executable(stereo_inertial_euroc
         Examples/Stereo-Inertial/stereo_inertial_euroc.cc)
@@ -237,7 +240,7 @@ add_executable(stereo_inertial_tum_vi
 target_link_libraries(stereo_inertial_tum_vi ${PROJECT_NAME})
 
 #Multi Inertial examples
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/Multi-Inertial)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${OPENMAVIS_OUTPUT_ROOT}/Examples/Multi-Inertial)
 
 add_executable(multi_inertial_euroc
         Examples/Multi-Inertial/multi_inertial_euroc.cc)
@@ -254,7 +257,7 @@ if(realsense2_FOUND)
     target_link_libraries(stereo_inertial_realsense_D435i ${PROJECT_NAME})
 endif()
 
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/Calibration)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${OPENMAVIS_OUTPUT_ROOT}/Examples/Calibration)
 if(realsense2_FOUND)
     add_executable(recorder_realsense_D435i
             Examples/Calibration/recorder_realsense_D435i.cc)
@@ -268,7 +271,7 @@ endif()
 #Old examples
 
 # RGB-D examples
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples_old/RGB-D)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${OPENMAVIS_OUTPUT_ROOT}/Examples_old/RGB-D)
 
 add_executable(rgbd_tum_old
         Examples_old/RGB-D/rgbd_tum.cc)
@@ -282,7 +285,7 @@ endif()
 
 
 # RGB-D inertial examples
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples_old/RGB-D-Inertial)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${OPENMAVIS_OUTPUT_ROOT}/Examples_old/RGB-D-Inertial)
 
 if(realsense2_FOUND)
     add_executable(rgbd_inertial_realsense_D435i_old
@@ -291,7 +294,7 @@ if(realsense2_FOUND)
 endif()
 
 #Stereo examples
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples_old/Stereo)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${OPENMAVIS_OUTPUT_ROOT}/Examples_old/Stereo)
 
 add_executable(stereo_kitti_old
         Examples_old/Stereo/stereo_kitti.cc)
@@ -316,7 +319,7 @@ if(realsense2_FOUND)
 endif()
 
 #Monocular examples
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples_old/Monocular)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${OPENMAVIS_OUTPUT_ROOT}/Examples_old/Monocular)
 
 add_executable(mono_tum_old
         Examples_old/Monocular/mono_tum.cc)
@@ -345,7 +348,7 @@ if(realsense2_FOUND)
 endif()
 
 #Monocular inertial examples
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples_old/Monocular-Inertial)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${OPENMAVIS_OUTPUT_ROOT}/Examples_old/Monocular-Inertial)
 
 add_executable(mono_inertial_euroc_old
         Examples_old/Monocular-Inertial/mono_inertial_euroc.cc)
@@ -366,7 +369,7 @@ if(realsense2_FOUND)
 endif()
 
 #Stereo Inertial examples
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples_old/Stereo-Inertial)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${OPENMAVIS_OUTPUT_ROOT}/Examples_old/Stereo-Inertial)
 
 add_executable(stereo_inertial_euroc_old
         Examples_old/Stereo-Inertial/stereo_inertial_euroc.cc)
@@ -386,7 +389,7 @@ if(realsense2_FOUND)
     target_link_libraries(stereo_inertial_realsense_D435i_old ${PROJECT_NAME})
 endif()
 
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/Multi-Inertial)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${OPENMAVIS_OUTPUT_ROOT}/Examples/Multi-Inertial)
 add_executable(multi_inertial_prepared Examples/Multi-Inertial/multi_inertial_prepared.cc)
 target_link_libraries(multi_inertial_prepared ${PROJECT_NAME})
 
@@ -395,3 +398,13 @@ target_link_libraries(prepared_camera_audit ${PROJECT_NAME})
 
 add_executable(prepared_match_audit Examples/Multi-Inertial/prepared_match_audit.cc)
 target_link_libraries(prepared_match_audit ${PROJECT_NAME})
+
+add_executable(multi_regression Examples/Multi-Inertial/multi_regression.cc)
+target_link_libraries(multi_regression ${PROJECT_NAME})
+target_compile_definitions(multi_regression PRIVATE BASELINE_ABI)
+if(OPENMAVIS_SANITIZE)
+  foreach(t ORB_SLAM3 multi_regression)
+    target_compile_options(${t} PRIVATE -O1 -g1 -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_libraries(${t} -fsanitize=address,undefined)
+  endforeach()
+endif()

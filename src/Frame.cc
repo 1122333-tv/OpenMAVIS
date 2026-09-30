@@ -84,6 +84,14 @@ Frame::Frame(const Frame &frame)
      mTlsr(frame.mTlsr), mRlsr(frame.mRlsr), mtlsr(frame.mtlsr), mTsrl(frame.mTsrl),
      mTcw(frame.mTcw), mbHasPose(false), mbHasVelocity(false)
 {
+    rig_seeds=frame.rig_seeds; rig_match_stats=frame.rig_match_stats; rig_candidates=frame.rig_candidates; rig_matches_enabled=frame.rig_matches_enabled;
+    is_multi_rig = frame.is_multi_rig;
+    multi_projection_level = frame.multi_projection_level;
+    multi_diagnostics = frame.multi_diagnostics;
+    motion_visible = frame.motion_visible;
+    motion_candidates = frame.motion_candidates;
+    motion_matches = frame.motion_matches;
+    local_visible = frame.local_visible; local_candidates = frame.local_candidates;
     for(int i=0;i<FRAME_GRID_COLS;i++)
         for(int j=0; j<FRAME_GRID_ROWS; j++){
             mGrid[i][j]=frame.mGrid[i][j];

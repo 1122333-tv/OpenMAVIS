@@ -22,6 +22,8 @@
 ******************************************************************************/
 
 #include "LocalMapping.h"
+#include <fstream>
+#include <iomanip>
 #include "LoopClosing.h"
 #include "ORBmatcher.h"
 #include "Optimizer.h"
@@ -1331,6 +1333,34 @@ void LocalMapping::InitializeIMU(float priorG, float priorA, bool bFIBA)
     if(mpCurrentKeyFrame->mTimeStamp-mFirstTs<minTime)
         return;
 
+    auto record=[&](const char* stage) {
+        if(!mpTracker->multi_diagnostics.load()) return;
+        std::ofstream out("imu_events.csv",std::ios::app);
+        if(out.tellp()==0) out<<"time,keyframe,map,stage,keyframes,span,scale,bg_x,bg_y,bg_z,ba_x,ba_y,ba_z,gravity_x,gravity_y,gravity_z,velocity_x,velocity_y,velocity_z,imu_rms_rotation,imu_rms_velocity,imu_rms_position,imu_links\n";
+        const bool begin=std::string(stage)=="optimization_begin";
+        const Eigen::Vector3d bg=begin?vpKF.front()->GetGyroBias().cast<double>():mbg;
+        const Eigen::Vector3d ba=begin?vpKF.front()->GetAccBias().cast<double>():mba;
+        const Eigen::Vector3d gravity=std::string(stage)=="imu_initialized"?Eigen::Vector3d(0,0,-9.81):Eigen::Vector3d(mRwg*Eigen::Vector3d(0,0,-9.81));
+        double er=0,ev=0,ep=0;int links=0;
+        const IMU::Bias bias(ba[0],ba[1],ba[2],bg[0],bg[1],bg[2]);
+        for(KeyFrame* k:vpKF) if(k->mPrevKF && k->mpImuPreintegrated && k->mpImuPreintegrated->dT>0) {
+            auto* pre=k->mpImuPreintegrated;const double dt=pre->dT;
+            const Eigen::Matrix3d R=k->mPrevKF->GetImuRotation().cast<double>();
+            const Eigen::Vector3d v=k->mPrevKF->GetVelocity().cast<double>();
+            const Eigen::Matrix3d dr=pre->GetDeltaRotation(bias).cast<double>();
+            er+=(R.transpose()*k->GetImuRotation().cast<double>()-dr).squaredNorm();
+            ev+=(R.transpose()*(k->GetVelocity().cast<double>()-v-gravity*dt)-pre->GetDeltaVelocity(bias).cast<double>()).squaredNorm();
+            ep+=(R.transpose()*(k->GetImuPosition().cast<double>()-k->mPrevKF->GetImuPosition().cast<double>()-v*dt-.5*gravity*dt*dt)-pre->GetDeltaPosition(bias).cast<double>()).squaredNorm();
+            ++links;
+        }
+        out<<std::setprecision(17)<<mpCurrentKeyFrame->mTimeStamp<<','<<mpCurrentKeyFrame->mnId<<','<<mpCurrentKeyFrame->GetMap()->GetId()<<','<<stage<<','<<vpKF.size()<<','<<mpCurrentKeyFrame->mTimeStamp-mFirstTs<<','<<mScale;
+        for(int c=0;c<3;++c) out<<','<<bg[c];
+        for(int c=0;c<3;++c) out<<','<<ba[c];
+        for(int c=0;c<3;++c) out<<','<<gravity[c];
+        const auto velocity=mpCurrentKeyFrame->GetVelocity();for(int c=0;c<3;++c) out<<','<<velocity[c];
+        out<<','<<(links?std::sqrt(er/links):0)<<','<<(links?std::sqrt(ev/links):0)<<','<<(links?std::sqrt(ep/links):0)<<','<<links;
+        out<<std::endl;
+    };
     bInitializing = true;
 
     while(CheckNewKeyFrames())
@@ -1385,7 +1415,9 @@ void LocalMapping::InitializeIMU(float priorG, float priorA, bool bFIBA)
     mInitTime = mpTracker->mLastFrame.mTimeStamp-vpKF.front()->mTimeStamp;
 
     std::chrono::steady_clock::time_point t0 = std::chrono::steady_clock::now();
+    record("optimization_begin");
     Optimizer::InertialOptimization(mpAtlas->GetCurrentMap(), mRwg, mScale, mbg, mba, mbMonocular, infoInertial, false, false, priorG, priorA);
+    record("optimization_end");
 
     std::chrono::steady_clock::time_point t1 = std::chrono::steady_clock::now();
 
@@ -1417,6 +1449,7 @@ void LocalMapping::InitializeIMU(float priorG, float priorA, bool bFIBA)
     if (!mpAtlas->isImuInitialized())
     {
         mpAtlas->SetImuInitialized();
+        record("imu_initialized");
         mpTracker->t0IMU = mpTracker->mCurrentFrame.mTimeStamp;
         mpCurrentKeyFrame->bImu = true;
     }

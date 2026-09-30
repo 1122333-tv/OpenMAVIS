@@ -22,6 +22,7 @@
 ******************************************************************************/
 
 #include "System.h"
+#include <deque>
 #include "Converter.h"
 #include <thread>
 #include <pangolin/pangolin.h>
@@ -1404,7 +1405,7 @@ System::MultiDiagnostics System::GetMultiDiagnostics()
 {
     unique_lock<mutex> lock(mMutexState);
     const Frame& f = mpTracker->mCurrentFrame;
-    MultiDiagnostics d;
+    MultiDiagnostics d{};
     d.state = mTrackingState;
     d.features[0] = f.mvKeys.size();
     d.features[1] = f.mvKeysRight.size();
@@ -1417,7 +1418,98 @@ System::MultiDiagnostics System::GetMultiDiagnostics()
     d.maps = mpAtlas->CountMaps();
     d.map_id = mpAtlas->GetCurrentMap()->GetId();
     d.imu_initialized = mpAtlas->isImuInitialized();
+    std::set<MapPoint*> unique;
+    for(int i=0;i<f.N;++i) if(f.mvpMapPoints[i] && !f.mvbOutlier[i]) unique.insert(f.mvpMapPoints[i]);
+    d.unique_inliers=unique.size(); d.rig_seeds=f.rig_seeds.size();
+    d.preintegration_dt=f.mpImuPreintegratedFrame?f.mpImuPreintegratedFrame->dT:0;
+    for(int c=0;c<4;++c) {
+        d.motion_visible[c]=f.motion_visible[c]; d.motion_candidates[c]=f.motion_candidates[c]; d.motion_matches[c]=f.motion_matches[c];
+        d.local_visible[c]=f.local_visible[c];d.local_candidates[c]=f.local_candidates[c];
+        d.reference_matches[c]=mpTracker->reference_matches[c]; d.local_before[c]=mpTracker->local_before[c]; d.local_after[c]=mpTracker->local_after[c];
+        d.residual_before[c]=mpTracker->residual_before[c]; d.residual_after[c]=mpTracker->residual_after[c];
+    }
+    for(int c=0;c<3;++c) d.stage_success[c]=mpTracker->stage_success[c];
     return d;
+}
+
+void System::EnableMultiDiagnostics(bool enabled) { mpTracker->multi_diagnostics.store(enabled); }
+
+void System::SaveMultiDiagnostics(unsigned long frame) {
+    if(!mpTracker->multi_diagnostics.load()) return;
+    Frame& f=mpTracker->mCurrentFrame;
+    std::ofstream stats("match_stages.csv",std::ios::app);
+    if(stats.tellp()==0) stats<<"frame,a,b,queries,no_geometry,ratio,hamming,mutual,singleton,parallax,negative_a,negative_b,reprojection_a,reprojection_b,invalid,accepted,seeds\n";
+    for(const auto& s:f.rig_match_stats) {
+        stats<<frame<<','<<s.a<<','<<s.b<<','<<s.queries<<','<<s.no_geometry<<','<<s.ratio<<','<<s.hamming<<','<<s.mutual<<','<<s.singleton;
+        for(auto count:s.geometry) stats<<','<<count;
+        stats<<','<<s.invalid<<','<<s.accepted<<','<<f.rig_seeds.size()<<'\n';
+    }
+    // Diagnostic pixels are frozen on the caller thread. Keep five frames before
+    // each of the first five losses, plus five after, without retaining map pointers.
+    static thread_local std::deque<std::pair<unsigned long,cv::Mat>> recent;
+    static thread_local int lastState=-1, losses=0, after=0;
+    static thread_local bool lastImu=false;
+    if(frame==0) {recent.clear();lastState=-1;losses=0;after=0;lastImu=false;}
+    auto save=[](unsigned long idx,const cv::Mat& pixels) {
+        const auto path="overlays/frame_"+std::to_string(idx)+".jpg";
+        if(!cv::imwrite(path,pixels,{cv::IMWRITE_JPEG_QUALITY,85})) throw std::runtime_error("Cannot write diagnostic image: "+path);
+    };
+    // Track() clears its Frame after creating a new map. This is an algorithm
+    // event, not a failed input decode; preserve prior pixels and report it.
+    if(f.imgLeft.empty() || f.imgRight.empty() || f.imgSideLeft.empty() || f.imgSideRight.empty()) {
+        for(const auto& previous:recent) save(previous.first,previous.second);
+        std::ofstream events("diagnostic_events.csv",std::ios::app);
+        if(events.tellp()==0) events<<"frame,event\n";
+        events<<frame<<",frame_cleared_at_map_boundary\n";
+        recent.clear();lastState=GetTrackingState();lastImu=mpAtlas->isImuInitialized();return;
+    }
+    const bool imu=mpAtlas->isImuInitialized(),initialization=imu && !lastImu;
+    const bool loss=lastState==2 && GetTrackingState()!=2 && losses<5;
+    if(loss) {++losses;after=6;}
+    if(initialization) {after=6;losses=0;}
+    const bool selected=frame<128 || frame%30==0 || after>0;
+    const int offsets[]={0,f.Nleft,f.Nleft+f.Nright,f.Nleft+f.Nright+f.Nsideleft};
+    const std::vector<cv::KeyPoint>* keys[]={&f.mvKeys,&f.mvKeysRight,&f.mvKeysSideLeft,&f.mvKeysSideRight};
+    const cv::Mat images[]={f.imgLeft,f.imgRight,f.imgSideLeft,f.imgSideRight};
+    GeometricCamera* cameras[]={f.mpCamera,f.mpCamera2,f.mpCamera3,f.mpCamera4};
+    const Sophus::SE3f poses[]={Sophus::SE3f(),f.GetRelativePoseTrl(),f.GetRelativePoseTsll(),f.GetRelativePoseTsrl()};
+    cv::Mat mosaic;
+    for(int c=0;c<4;++c) {
+        cv::Mat panel;cv::resize(images[c],panel,cv::Size(640,400));cv::cvtColor(panel,panel,cv::COLOR_GRAY2BGR);
+        const float sx=640.f/images[c].cols,sy=400.f/images[c].rows;
+        for(size_t k=0;k<keys[c]->size();++k) {
+            const int idx=offsets[c]+k;const auto pixel=(*keys[c])[k].pt;
+            cv::Point measured(pixel.x*sx,pixel.y*sy);
+            const bool mapped=f.mvpMapPoints[idx]!=nullptr;
+            cv::circle(panel,measured,mapped?2:1,mapped?(f.mvbOutlier[idx]?cv::Scalar(0,0,255):cv::Scalar(0,255,0)):cv::Scalar(160,100,0),-1);
+            if(mapped && f.HasPose()) {
+                const Eigen::Vector3f point=poses[c]*(f.GetPose()*f.mvpMapPoints[idx]->GetWorldPos());
+                const Eigen::Vector2f uv=cameras[c]->project(point);
+                if(point.z()>0 && uv.allFinite() && uv.x()>=0 && uv.x()<images[c].cols && uv.y()>=0 && uv.y()<images[c].rows)
+                    cv::line(panel,measured,cv::Point(uv.x()*sx,uv.y()*sy),cv::Scalar(0,255,255));
+            }
+        }
+        cv::putText(panel,"cam"+std::to_string(c)+" frame "+std::to_string(frame),cv::Point(10,20),cv::FONT_HERSHEY_SIMPLEX,.5,cv::Scalar(255,255,255));
+        if(mosaic.empty()) mosaic=panel;else cv::hconcat(mosaic,panel,mosaic);
+    }
+    if(selected) {
+        std::ofstream candidates("match_candidates.csv",std::ios::app);
+        if(candidates.tellp()==0) candidates<<"frame,a,b,index_a,index_b,u_a,v_a,u_b,v_b,reason,hamming\n";
+        int shown[10]={};
+        for(const auto& candidate:f.rig_candidates) {
+            const auto a=(*keys[candidate.a])[candidate.ia-offsets[candidate.a]].pt;
+            const auto b=(*keys[candidate.b])[candidate.ib-offsets[candidate.b]].pt;
+            candidates<<frame<<','<<candidate.a<<','<<candidate.b<<','<<candidate.ia<<','<<candidate.ib<<','<<a.x<<','<<a.y<<','<<b.x<<','<<b.y<<','<<candidate.reason<<','<<candidate.distance<<'\n';
+            if(shown[candidate.reason]++<(candidate.reason==0?100:10))
+                cv::line(mosaic,cv::Point(candidate.a*640+a.x*.5,a.y*.5),cv::Point(candidate.b*640+b.x*.5,b.y*.5),candidate.reason==0?cv::Scalar(0,255,0):cv::Scalar(0,0,180));
+        }
+    }
+    if(loss || initialization) for(const auto& previous:recent) save(previous.first,previous.second);
+    if(selected) save(frame,mosaic);
+    recent.emplace_back(frame,mosaic);if(recent.size()>5) recent.pop_front();
+    if(after>0) --after;
+    lastState=GetTrackingState();
+    lastImu=imu;
 }
 
 int System::GetTrackingState()
@@ -1650,4 +1742,3 @@ string System::CalculateCheckSum(string filename, int type)
 }
 
 } //namespace ORB_SLAM
-

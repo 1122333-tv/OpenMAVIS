@@ -35,6 +35,8 @@
 #include "GeometricTools.h"
 
 #include <iostream>
+#include <fstream>
+#include <iomanip>
 
 #include <mutex>
 #include <chrono>
@@ -1596,6 +1598,9 @@ Sophus::SE3f Tracking::GrabImageMulti(const cv::Mat &imRectLeft, const cv::Mat &
                               mpORBextractorLeft,mpORBextractorRight,mpORBextractorSideLeft,mpORBextractorSideRight,mbleft, mbright, mbsideleft, mbsideright,
                               mpORBVocabulary,mK,mDistCoef,mbf,mThDepth,mpCamera,mpCamera2,mpCamera3,mpCamera4,mTlr,mTlsl,mTlsr,&mLastFrame,*mpImuCalib,filter_invalid_rays);
 
+    mCurrentFrame.multi_diagnostics = multi_diagnostics.load();
+    reference_matches.fill(-1); local_before.fill(-1); local_after.fill(-1); stage_success.fill(-1);
+    residual_before.fill(0); residual_after.fill(0);
     mCurrentFrame.mNameFile = filename;
     mCurrentFrame.mnDataset = mnNumDataset;
 
@@ -2040,14 +2045,14 @@ void Tracking::Track()
                 if((!mbVelocity && !pCurrentMap->isImuInitialized()) || mCurrentFrame.mnId<mnLastRelocFrameId+2)
                 {
                     Verbose::PrintMess("TRACK: Track with respect to the reference KF ", Verbose::VERBOSITY_DEBUG);
-                    bOK = TrackReferenceKeyFrame();
+                    bOK = (stage_success[1] = TrackReferenceKeyFrame());
                 }
                 else
                 {
                     Verbose::PrintMess("TRACK: Track with motion model", Verbose::VERBOSITY_DEBUG);
-                    bOK = TrackWithMotionModel();
+                    bOK = (stage_success[0] = TrackWithMotionModel());
                     if(!bOK)
-                        bOK = TrackReferenceKeyFrame();
+                        bOK = (stage_success[1] = TrackReferenceKeyFrame());
                 }
 
 
@@ -2144,11 +2149,11 @@ void Tracking::Track()
                     // In last frame we tracked enough MapPoints in the map
                     if(mbVelocity)
                     {
-                        bOK = TrackWithMotionModel();
+                        bOK = (stage_success[0] = TrackWithMotionModel());
                     }
                     else
                     {
-                        bOK = TrackReferenceKeyFrame();
+                        bOK = (stage_success[1] = TrackReferenceKeyFrame());
                     }
                 }
                 else
@@ -2166,7 +2171,7 @@ void Tracking::Track()
                     Sophus::SE3f TcwMM;
                     if(mbVelocity)
                     {
-                        bOKMM = TrackWithMotionModel();
+                        bOKMM = (stage_success[0] = TrackWithMotionModel());
                         vpMPsMM = mCurrentFrame.mvpMapPoints;
                         vbOutMM = mCurrentFrame.mvbOutlier;
                         TcwMM = mCurrentFrame.GetPose();
@@ -2219,7 +2224,7 @@ void Tracking::Track()
         {
             if(bOK)
             {
-                bOK = TrackLocalMap();
+                bOK = (stage_success[2] = TrackLocalMap());
 
             }
             if(!bOK)
@@ -2231,7 +2236,7 @@ void Tracking::Track()
             // a local map and therefore we do not perform TrackLocalMap(). Once the system relocalizes
             // the camera we will use the local map again.
             if(bOK && !mbVO)
-                bOK = TrackLocalMap();
+                bOK = (stage_success[2] = TrackLocalMap());
         }
 
         if(bOK)
@@ -2612,6 +2617,7 @@ void Tracking::MultiInitialization()
         mpMapDrawer->SetCurrentCameraPose(mCurrentFrame.GetPose());
 
         mState=OK;
+        RecordMultiEvent("visual_initialized");
     }
 }
 
@@ -2832,6 +2838,7 @@ void Tracking::CreateInitialMapMonocular()
 
 void Tracking::CreateMapInAtlas()
 {
+    RecordMultiEvent("new_map");
     mnLastInitFrameId = mCurrentFrame.mnId;
     mpAtlas->CreateNewMap();
     if (mSensor==System::IMU_STEREO || mSensor == System::IMU_MONOCULAR || mSensor == System::IMU_RGBD || mSensor == System::IMU_MULTI)
@@ -2900,6 +2907,13 @@ bool Tracking::TrackReferenceKeyFrame()
 
     int nmatches = matcher.SearchByBoW(mpReferenceKF,mCurrentFrame,vpMapPointMatches);
 
+    if(multi_diagnostics.load()) {
+        reference_matches.fill(0);
+        for(int i=0;i<mCurrentFrame.N;++i) if(vpMapPointMatches[i]) {
+            int c=i<mCurrentFrame.Nleft?0:i<mCurrentFrame.Nleft+mCurrentFrame.Nright?1:i<mCurrentFrame.Nleft+mCurrentFrame.Nright+mCurrentFrame.Nsideleft?2:3;
+            ++reference_matches[c];
+        }
+    }
     if(nmatches<15)
     {
         cout << "TRACK_REF_KF: Less than 15 matches!!\n";
@@ -3141,6 +3155,7 @@ bool Tracking::TrackLocalMap()
                 aux2++;
         }
 
+    if(multi_diagnostics.load()) CaptureMultiStage(local_before, &residual_before);
     int inliers;
     if (!mpAtlas->isImuInitialized())
         Optimizer::PoseOptimization(&mCurrentFrame);
@@ -3176,6 +3191,7 @@ bool Tracking::TrackLocalMap()
                 aux2++;
         }
 
+    if(multi_diagnostics.load()) CaptureMultiStage(local_after, &residual_after);
     mnMatchesInliers = 0;
 
     // Update MapPoints Statistics
@@ -3390,6 +3406,7 @@ bool Tracking::NeedNewKeyFrame()
 
 void Tracking::CreateNewKeyFrame()
 {
+    RecordMultiEvent("keyframe_insert_begin");
     if(mpLocalMapper->IsInitializing() && !mpAtlas->isImuInitialized())
         return;
 
@@ -3955,6 +3972,7 @@ bool Tracking::Relocalization()
 
 void Tracking::Reset(bool bLocMap)
 {
+    RecordMultiEvent("reset_all");
     ++reset_count;
     Verbose::PrintMess("System Reseting", Verbose::VERBOSITY_NORMAL);
 
@@ -4017,6 +4035,7 @@ void Tracking::Reset(bool bLocMap)
 
 void Tracking::ResetActiveMap(bool bLocMap)
 {
+    RecordMultiEvent("reset_active");
     ++reset_count;
     Verbose::PrintMess("Active map Reseting", Verbose::VERBOSITY_NORMAL);
     if(mpViewer)
@@ -4303,3 +4322,33 @@ void Tracking::Release()
 #endif
 
 } //namespace ORB_SLAM
+
+namespace ORB_SLAM3 {
+void Tracking::CaptureMultiStage(std::array<int,4>& counts, std::array<double,4>* residual) {
+    counts.fill(0); if(residual) residual->fill(0);
+    const int offsets[]={0,mCurrentFrame.Nleft,mCurrentFrame.Nleft+mCurrentFrame.Nright,mCurrentFrame.Nleft+mCurrentFrame.Nright+mCurrentFrame.Nsideleft,mCurrentFrame.N};
+    GeometricCamera* cameras[]={mCurrentFrame.mpCamera,mCurrentFrame.mpCamera2,mCurrentFrame.mpCamera3,mCurrentFrame.mpCamera4};
+    const Sophus::SE3f relative[]={Sophus::SE3f(),mCurrentFrame.GetRelativePoseTrl(),mCurrentFrame.GetRelativePoseTsll(),mCurrentFrame.GetRelativePoseTsrl()};
+    const std::vector<cv::KeyPoint>* keys[]={&mCurrentFrame.mvKeys,&mCurrentFrame.mvKeysRight,&mCurrentFrame.mvKeysSideLeft,&mCurrentFrame.mvKeysSideRight};
+    for(int c=0;c<4;++c) for(int i=offsets[c];i<offsets[c+1];++i) {
+        MapPoint* point=mCurrentFrame.mvpMapPoints[i];
+        if(!point || mCurrentFrame.mvbOutlier[i]) continue;
+        ++counts[c];
+        if(residual) {
+            const auto& key=(*keys[c])[i-offsets[c]];
+            Eigen::Vector3f p=relative[c]*(mCurrentFrame.GetPose()*point->GetWorldPos());
+            Eigen::Vector2f uv=cameras[c]->project(p);
+            if(p.allFinite() && p.z()>0 && uv.allFinite())
+                (*residual)[c]+=(uv-Eigen::Vector2f(key.pt.x,key.pt.y)).squaredNorm()/mCurrentFrame.mvLevelSigma2[key.octave];
+        }
+    }
+    if(residual) for(int c=0;c<4;++c) (*residual)[c]=counts[c]?std::sqrt((*residual)[c]/counts[c]):0;
+}
+void Tracking::RecordMultiEvent(const std::string& reason) {
+    if(!multi_diagnostics.load()) return;
+    std::ofstream out("tracking_events.csv",std::ios::app);
+    if(out.tellp()==0) out<<"time,frame,event,map,keyframes,points,resets,state,pose_valid,imu_initialized\n";
+    Map* map=mpAtlas->GetCurrentMap();
+    out<<std::setprecision(17)<<mCurrentFrame.mTimeStamp<<','<<mCurrentFrame.mnId<<','<<reason<<','<<map->GetId()<<','<<map->KeyFramesInMap()<<','<<map->MapPointsInMap()<<','<<reset_count<<','<<mState<<','<<mCurrentFrame.HasPose()<<','<<map->isImuInitialized()<<std::endl;
+}
+}

@@ -19,4 +19,17 @@ class Acceptance(unittest.TestCase):
     def test_no_imu_initialization(self):
         for r in self.rows:r['imu_initialized']=0
         self.assertEqual(self.result()['acceptance'],'NOT_PASSED')
+    def test_initialization_deadline(self):
+        for r in self.rows[:2]:r['imu_initialized']=0
+        self.result()
+        self.assertEqual(runner.summarize(self.out,0,True,1)['acceptance'],'NOT_PASSED')
+        self.assertEqual(runner.summarize(self.out,0,True,2)['acceptance'],'PASS')
+    def detail(self,missing_camera=False,event=True):
+        (self.out/'diagnostics.csv').write_text('unique_inliers,preintegration_dt,local_after_cam0,local_after_cam1,local_after_cam2,local_after_cam3\n'+('4,0.1,1,1,1,'+('0' if missing_camera else '1')+'\n')*3)
+        (self.out/'imu_events.csv').write_text('stage\n'+('imu_initialized\n' if event else ''))
+    def test_four_camera_optimization_evidence(self):
+        self.detail(missing_camera=True);self.assertEqual(self.result()['acceptance'],'NOT_PASSED')
+        self.detail();self.assertEqual(self.result()['acceptance'],'PASS')
+    def test_real_imu_event_required_with_diagnostics(self):
+        self.detail(event=False);self.assertEqual(self.result()['acceptance'],'NOT_PASSED')
 if __name__=='__main__':unittest.main()

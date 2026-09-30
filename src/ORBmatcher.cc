@@ -74,6 +74,7 @@ namespace ORB_SLAM3
 
                 const vector<size_t> vIndices =
                         F.GetFeaturesInArea(pMP->mTrackProjX,pMP->mTrackProjY,r*F.mvScaleFactors[nPredictedLevel],nPredictedLevel-1,nPredictedLevel,0);
+                if(F.multi_diagnostics) {++F.local_visible[0]; F.local_candidates[0]+=vIndices.size();}
 
                 if(!vIndices.empty()){
                     const cv::Mat MPdescriptor = pMP->GetDescriptor();
@@ -158,6 +159,7 @@ namespace ORB_SLAM3
 
                     const vector<size_t> vIndices =
                             F.GetFeaturesInArea(pMP->mTrackProjXR,pMP->mTrackProjYR,r*F.mvScaleFactors[nPredictedLevel],nPredictedLevel-1,nPredictedLevel,1);
+                if(F.multi_diagnostics) {++F.local_visible[1]; F.local_candidates[1]+=vIndices.size();}
 
                     if(!vIndices.empty()){
                         const cv::Mat MPdescriptor = pMP->GetDescriptor();
@@ -225,6 +227,7 @@ namespace ORB_SLAM3
 
                     const vector<size_t> vIndices =
                             F.GetFeaturesInArea(pMP->mTrackProjXSL,pMP->mTrackProjYSL,r*F.mvScaleFactors[nPredictedLevel],nPredictedLevel-1,nPredictedLevel,2);
+                if(F.multi_diagnostics) {++F.local_visible[2]; F.local_candidates[2]+=vIndices.size();}
 
                     if(!vIndices.empty()){
                         const cv::Mat MPdescriptor = pMP->GetDescriptor();
@@ -285,6 +288,7 @@ namespace ORB_SLAM3
 
                     const vector<size_t> vIndices =
                             F.GetFeaturesInArea(pMP->mTrackProjXSR,pMP->mTrackProjYSR,r*F.mvScaleFactors[nPredictedLevel],nPredictedLevel-1,nPredictedLevel,3);
+                if(F.multi_diagnostics) {++F.local_visible[3]; F.local_candidates[3]+=vIndices.size();}
 
                     if(!vIndices.empty()){
                         const cv::Mat MPdescriptor = pMP->GetDescriptor();
