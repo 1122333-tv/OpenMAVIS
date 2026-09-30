@@ -88,3 +88,8 @@ git diff --check
 ```
 
 构建/测试/相机审计/输入校验日志另存于 results/implementation_validation_20260923。已有 GCC/Eigen 弃用及上游警告仍存在；本次未进行广泛清理。所有结果仅证明实际执行及上述局限，不构成绝对精度、GUI 或其他数据集泛化验证。
+
+
+## 2026-09-30 后续修复实验
+
+上述结论保留为历史适配结果。后续初始化与跟踪修复、受控实验、独立验证和 GUI 记录见 [Layout0921 初始化与跟踪修复验证记录](layout0921_initialization_tracking_repair_validation.md)。
