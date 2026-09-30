@@ -413,7 +413,7 @@ void Viewer::Run()
 
         if(Stop())
         {
-            while(isStopped())
+            while(isStopped() && !CheckFinish())
             {
                 usleep(3000);
             }
@@ -423,7 +423,13 @@ void Viewer::Run()
             break;
     }
 
+    // Destroy the windows on the same thread that created them, before the
+    // caller joins us and starts process/library teardown.
+    cv::destroyWindow("ORB-SLAM3-Multi: Current Frame");
+    cv::waitKey(1);
+    pangolin::DestroyWindow("ORB-SLAM3-Multi: Map Viewer");
     SetFinish();
+    cout << "Viewer finished" << endl;
 }
 
 void Viewer::RequestFinish()

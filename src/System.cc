@@ -626,12 +626,8 @@ void System::Shutdown()
 
     mpLocalMapper->RequestFinish();
     mpLoopCloser->RequestFinish();
-    /*if(mpViewer)
-    {
+    if(mpViewer)
         mpViewer->RequestFinish();
-        while(!mpViewer->isFinished())
-            usleep(5000);
-    }*/
 
     int count = 0;
     // Wait until all thread have effectively stopped
@@ -650,6 +646,13 @@ void System::Shutdown()
         }
         usleep(100000);
     }
+
+    // The GUI owns Qt/OpenGL objects on its worker thread. Do not let process
+    // teardown unload those libraries while that thread is still drawing (or
+    // even creating its first window). The viewer's Stop menu calls Shutdown
+    // itself, so that caller must not attempt to join its own thread.
+    if(mpViewer && mptViewer->joinable() && mptViewer->get_id()!=std::this_thread::get_id())
+        mptViewer->join();
 
     if(!mStrSaveAtlasToFile.empty())
     {
