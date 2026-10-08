@@ -46,13 +46,14 @@ static int64_t shifted(int64_t t, int64_t offset) {
 int main(int argc,char**argv) {
     unique_ptr<ORB_SLAM3::System> slam;
     try {
-        map<string,string> opts; bool viewer=false,realtime=false,validate=false,diagnostics=false;
+        map<string,string> opts; bool viewer=false,realtime=false,validate=false,diagnostics=false,online=false;
         for(int i=1;i<argc;++i) {
             string k=argv[i];
             if(k=="--viewer") viewer=true;
             else if(k=="--realtime") realtime=true;
             else if(k=="--validate-only") validate=true;
             else if(k=="--diagnostics") diagnostics=true;
+            else if(k=="--online-output") online=true;
             else {
                 require(k=="--vocabulary" || k=="--settings" || k=="--dataset" || k=="--output" || k=="--cam-time-offset-ns" || k=="--max-frames","Unknown option: "+k);
                 require(i+1<argc,"Missing value for "+k); require(!opts.count(k),"Duplicate option: "+k); opts[k]=argv[++i];
@@ -111,6 +112,11 @@ int main(int argc,char**argv) {
             detail<<",rig_seeds,motion_success,reference_success,local_success"<<endl;
         }
         ofstream frames("frames.csv"); frames<<"frame,raw_ns,corrected_ns,imu_count,imu_first_ns,imu_last_ns,state,cam0_features,cam1_features,cam2_features,cam3_features,imu_initialized,map_id,maps,resets,stereo_matches,inliers,track_ms\n";
+        ofstream poses;
+        if(online) {
+            poses.open("online_body.csv");
+            poses<<"frame,corrected_ns,pose_valid,imu_initialized,state,map_id,resets,vio_only,loop_enabled,loop_corrections,merge_corrections,loop_gba_runs,tx,ty,tz,qw,qx,qy,qz\n";
+        }
         size_t cursor=0; int64_t start=shifted(images[0][0].ns,offset);
         // Keep the last sample before the first exposure. Thereafter submit each sample
         // once, including one sample at/after the frame boundary for interpolation.
@@ -129,6 +135,15 @@ int main(int argc,char**argv) {
             frames<<i<<','<<images[0][i].ns<<','<<t<<','<<samples.size()<<','<<imu[begin].ns<<','<<imu[cursor-1].ns<<','<<d.state;
             for(auto n:d.features) frames<<','<<n;
             frames<<','<<d.imu_initialized<<','<<d.map_id<<','<<d.maps<<','<<d.resets<<','<<d.stereo_matches<<','<<d.inliers<<','<<ms<<endl;
+            if(online) {
+                poses<<i<<','<<t<<','<<d.pose_valid<<','<<d.imu_initialized<<','<<d.state<<','<<d.map_id<<','<<d.resets
+                     <<','<<d.vio_only<<','<<d.loop_enabled<<','<<d.loop_corrections<<','<<d.merge_corrections<<','<<d.loop_gba_runs;
+                if(d.pose_valid) {
+                    const auto p=d.body_pose.translation();const auto q=d.body_pose.unit_quaternion();
+                    poses<<setprecision(17)<<','<<p.x()<<','<<p.y()<<','<<p.z()<<','<<q.w()<<','<<q.x()<<','<<q.y()<<','<<q.z();
+                } else poses<<",,,,,,,";
+                poses<<endl;
+            }
             if(diagnostics) {
                 detail<<setprecision(17)<<i<<','<<t*1e-9<<','<<d.state<<','<<d.unique_inliers<<','<<d.preintegration_dt;
                 for(auto group:{d.motion_visible,d.motion_candidates,d.motion_matches,d.reference_matches,d.local_visible,d.local_candidates,d.local_before,d.local_after})

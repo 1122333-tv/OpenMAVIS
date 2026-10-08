@@ -237,6 +237,23 @@ int main(int argc,char**argv) {
         std::getline(events,header);std::getline(events,event);
         check(event=="0,frame_cleared_at_map_boundary","cleared Frame diagnostic event missing");
     });
+    test("online_body_transform_direction",[&] {
+        Frame f;
+        const Sophus::SE3f Tbc(Eigen::AngleAxisf(.3f,Eigen::Vector3f::UnitY()).toRotationMatrix(),Eigen::Vector3f(.2f,-.1f,.4f));
+        const Sophus::SE3f Twb(Eigen::AngleAxisf(-.6f,Eigen::Vector3f::UnitZ()).toRotationMatrix(),Eigen::Vector3f(1,2,3));
+        f.mImuCalib=IMU::Calib(Tbc,0,0,0,0);f.SetPose((Twb*Tbc).inverse());
+        check((f.GetImuPose().matrix()-Twb.matrix()).norm()<1e-5,"online body pose direction wrong");
+        check((f.GetPose().inverse()*f.mImuCalib.mTcb).matrix().isApprox(Twb.matrix(),1e-5),"snapshot differs from Frame body pose");
+    });
+    if(argc==4 && std::string(argv[1])=="--vio-mode") test("immutable_vio_lock_and_empty_pose",[&] {
+        auto* slam=new System(argv[2],argv[3],System::IMU_MULTI,false);
+        check(slam->IsVIOOnly(),"VIO mode not enabled");
+        slam->ActivateLC();check(!slam->IsLoopClosingEnabled(),"GUI/API reactivated loop closure");
+        const auto d=slam->GetMultiDiagnostics();
+        check(!d.pose_valid && d.vio_only && !d.loop_enabled,"empty Frame or mode snapshot invalid");
+        check(!d.loop_corrections && !d.merge_corrections && !d.loop_gba_runs,"VIO correction event observed");
+        slam->Shutdown();
+    });
 #endif
     std::cout<<"RESULT "<<total-failed<<'/'<<total<<'\n';return failed?1:0;
 }

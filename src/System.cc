@@ -104,12 +104,20 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
         }
     }
 
+    mbVIOOnly = !fsSettings["System.VIOOnly"].empty() && int(fsSettings["System.VIOOnly"]) != 0;
+    if(mbVIOOnly) {
+        mStrLoadAtlasFromFile.clear();
+        mStrSaveAtlasToFile.clear();
+    }
     node = fsSettings["loopClosing"];
     bool activeLC = true;
     if(!node.empty())
     {
         activeLC = static_cast<int>(fsSettings["loopClosing"]) != 0;
     }
+    if(mbVIOOnly) activeLC = false;
+    cout << "VIO_MODE vio_only=" << mbVIOOnly << " loop_enabled=" << activeLC
+         << " atlas_persistence=" << (!mStrLoadAtlasFromFile.empty() || !mStrSaveAtlasToFile.empty()) << endl;
 
     mStrVocabularyFilePath = strVocFile;
 
@@ -581,8 +589,11 @@ void System::DeactivateLocalizationMode()
 void System::ActivateLC()
 {
     unique_lock<mutex> lock(mMutexMode);
+    if(mbVIOOnly) return;
     mpLoopCloser->ActivateLC();
 }
+
+bool System::IsLoopClosingEnabled() const { return mpLoopCloser->IsLCActive(); }
 
 void System::DeActivateLC()
 {
@@ -1421,8 +1432,20 @@ System::MultiDiagnostics System::GetMultiDiagnostics()
     d.maps = mpAtlas->CountMaps();
     d.map_id = mpAtlas->GetCurrentMap()->GetId();
     d.imu_initialized = mpAtlas->isImuInitialized();
+    d.pose_valid = f.HasPose();
+    if(d.pose_valid) {
+        // inverse(T_c_w) * T_c_b, without later keyframe reconstruction.
+        d.body_pose = f.GetPose().inverse() * f.mImuCalib.mTcb;
+        d.pose_valid = d.body_pose.matrix().allFinite();
+    }
+    d.vio_only = mbVIOOnly;
+    d.loop_enabled = IsLoopClosingEnabled();
+    d.loop_corrections = mpLoopCloser->loop_corrections.load();
+    d.merge_corrections = mpLoopCloser->merge_corrections.load();
+    d.loop_gba_runs = mpLoopCloser->loop_gba_runs.load();
     std::set<MapPoint*> unique;
-    for(int i=0;i<f.N;++i) if(f.mvpMapPoints[i] && !f.mvbOutlier[i]) unique.insert(f.mvpMapPoints[i]);
+    for(size_t i=0;i<std::min(f.mvpMapPoints.size(),f.mvbOutlier.size());++i)
+        if(f.mvpMapPoints[i] && !f.mvbOutlier[i]) unique.insert(f.mvpMapPoints[i]);
     d.unique_inliers=unique.size(); d.rig_seeds=f.rig_seeds.size();
     d.preintegration_dt=f.mpImuPreintegratedFrame?f.mpImuPreintegratedFrame->dT:0;
     for(int c=0;c<4;++c) {

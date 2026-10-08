@@ -138,6 +138,8 @@ public:
     // Activate / DeActivate Loop Closure.
     void ActivateLC();
     void DeActivateLC();
+    bool IsVIOOnly() const { return mbVIOOnly; }
+    bool IsLoopClosingEnabled() const;
 
     // Returns true if there have been a big map change (loop closure, global BA)
     // since last call to this function
@@ -193,6 +195,10 @@ public:
         unsigned long map_id, resets;
         int stereo_matches, inliers;
         bool imu_initialized;
+        bool pose_valid;
+        Sophus::SE3f body_pose; // IMU/body -> current world, captured after TrackMulti.
+        bool vio_only, loop_enabled;
+        unsigned long loop_corrections, merge_corrections, loop_gba_runs;
         int motion_visible[4], motion_candidates[4], motion_matches[4];
         int local_visible[4], local_candidates[4], stage_success[3];
         int reference_matches[4], local_before[4], local_after[4], unique_inliers;
@@ -276,6 +282,7 @@ private:
 
     // Shutdown flag
     bool mbShutDown;
+    bool mbVIOOnly = false; // Immutable after construction; old settings default false.
 
     // Tracking state
     int mTrackingState;

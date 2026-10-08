@@ -187,7 +187,7 @@ void Viewer::Run()
     pangolin::Var<bool> menuShowGraph("menu.Show Graph",true,true);
     pangolin::Var<bool> menuShowInertialGraph("menu.Show Inertial Graph",true,true);
     pangolin::Var<bool> menuLocalizationMode("menu.Localization Mode",false,true);
-    pangolin::Var<bool> menuLoopClosureMode("menu.LoopClosure Mode",true,true);
+    pangolin::Var<bool> menuLoopClosureMode(mpSystem->IsVIOOnly()?"menu.VIO (loop locked off)":"menu.LoopClosure Mode",!mpSystem->IsVIOOnly(),true);
     pangolin::Var<bool> menuReset("menu.Reset",false,false);
     pangolin::Var<bool> menuStop("menu.Stop",false,false);
     pangolin::Var<bool> menuStepByStep("menu.Step By Step",false,true);  // false, true
@@ -296,6 +296,7 @@ void Viewer::Run()
             bLocalizationMode = false;
         }
 
+        if(mpSystem->IsVIOOnly()) menuLoopClosureMode = false;
         if(menuLoopClosureMode)
             mpSystem->ActivateLC();
         else

@@ -35,6 +35,7 @@
 #include <boost/algorithm/string.hpp>
 #include <thread>
 #include <mutex>
+#include <atomic>
 #include "Thirdparty/g2o/g2o/types/types_seven_dof_expmap.h"
 
 #include <condition_variable>
@@ -71,6 +72,8 @@ public:
 
     // Main function
     void Run();
+    bool IsLCActive() const { return mbActiveLC.load(); }
+    std::atomic<unsigned long> loop_corrections{0}, merge_corrections{0}, loop_gba_runs{0};
 
     void InsertKeyFrame(KeyFrame *pKF);
 
@@ -265,7 +268,7 @@ protected:
 
 
     // To (de)activate LC
-    bool mbActiveLC = true;
+    std::atomic<bool> mbActiveLC{true};
 
 #ifdef REGISTER_LOOP
     string mstrFolderLoop;

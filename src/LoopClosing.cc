@@ -973,6 +973,7 @@ int LoopClosing::FindMatchesByProjection(KeyFrame* pCurrentKF, KeyFrame* pMatche
 
 void LoopClosing::CorrectLoop()
 {
+    ++loop_corrections;
     std::cout << "Loop detected!" << std::endl;
 
     // Send a stop signal to Local Mapping
@@ -1218,6 +1219,7 @@ void LoopClosing::CorrectLoop()
 
 void LoopClosing::MergeLocal()
 {
+    ++merge_corrections;
     int numTemporalKFs = 25; //Temporal KFs in the local window if the map is inertial.
 
     //Relationship to rebuild the essential graph, it is used two times, first in the local window and later in the rest of the map
@@ -1786,6 +1788,7 @@ void LoopClosing::MergeLocal()
 
 void LoopClosing::MergeLocal2()
 {
+    ++merge_corrections;
     //cout << "Merge detected!!!!" << endl;
 
     int numTemporalKFs = 11; //TODO (set by parameter): Temporal KFs in the local window if the map is inertial.
@@ -2206,7 +2209,8 @@ void LoopClosing::ResetIfRequested()
 }
 
 void LoopClosing::RunGlobalBundleAdjustment(Map* pActiveMap, unsigned long nLoopKF)
-{  
+{
+    ++loop_gba_runs;
     Verbose::PrintMess("Starting Global Bundle Adjustment", Verbose::VERBOSITY_NORMAL);
 
 #ifdef REGISTER_TIMES
