@@ -1,0 +1,10 @@
+{
+  "copied_from": "OKVIS2-X/scripts (Basalt vendored helpers)",
+  "okvis_commit": "27a2b8e",
+  "files_sha256": {
+    "capture_pipeline_common.py": "8346a04c775321df9e663c69b0dbc59c12252272ecd2bf3c1fb492c13a2364ca",
+    "interpolate_mocap_to_vio.py": "48e9d4f4584bb189c5cdbac70542d28f06c5038675d3fd08f15ee960258d4807",
+    "extend_evo_stats.py": "3323e498a0741d6e654afb372306ba5982cc0f6158e10e5d37460490937ea659"
+  },
+  "local_changes": "interpolate_mocap_to_vio.py also enforces valid_segments_ns for exact GT timestamps; original hashes retained"
+}

@@ -1,0 +1,7 @@
+# Validated local runtime on 2026-10-08; use an isolated Python environment.
+numpy==2.5.2
+PyYAML==6.0.3
+matplotlib==3.11.1
+Pillow==12.3.0
+evo==1.37.0
+PyQt6==6.11.0
