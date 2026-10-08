@@ -8,7 +8,7 @@
 
 两种来源的开发包均完成 1195 帧，独立包完成 2683 帧，三个完整回放均达到本轮初始化后连续跟踪标准。OpenMAVIS GUI 真实完整回放正常退出；evo 四种指标和轨迹窗口实际显示并关闭。HTML 图片、结构和产物一致性通过；**桌面浏览器实际页面渲染未验证**，原因及其他限制见第 8 节。流程完成、跟踪通过和精度数值独立报告。
 
-使用命令与阶段说明见 [使用说明](/home/yuewang/Project/VSLAM/four_fisheye_rig/OpenMAVIS/doc/dev/openmavis_vio_comparison_pipeline_usage.md)。所有构建、运行、失败结果和配图保存在 `OpenMAVIS/results/vio_pipeline_20261008/`，未加入 Git。
+使用命令与阶段说明见 [使用说明](./openmavis_vio_comparison_pipeline_usage.md)。所有构建、运行、失败结果和配图保存在 `OpenMAVIS/results/vio_pipeline_20261008/`，未加入 Git。
 
 ## 2. 输入、标定与来源检查
 
@@ -97,19 +97,19 @@ Common 取所有算法和可插值 GT 的精确整数时间交集，估计不补
 
 ### 开发三算法 Common 轨迹
 
-![三算法共同窗口轨迹](/home/yuewang/Project/VSLAM/four_fisheye_rig/OpenMAVIS/results/vio_pipeline_20261008/runs/run_20261008T164843_report_gui_final_d5b518/04_vio_comparison/common/trajectories.png)
+![三算法共同窗口轨迹](../../results/vio_pipeline_20261008/runs/run_20261008T164843_report_gui_final_d5b518/04_vio_comparison/common/trajectories.png)
 
 ### 开发三算法 APE
 
-![三算法共同窗口平移 APE](/home/yuewang/Project/VSLAM/four_fisheye_rig/OpenMAVIS/results/vio_pipeline_20261008/runs/run_20261008T164843_report_gui_final_d5b518/04_vio_comparison/common/ape_translation.png)
+![三算法共同窗口平移 APE](../../results/vio_pipeline_20261008/runs/run_20261008T164843_report_gui_final_d5b518/04_vio_comparison/common/ape_translation.png)
 
 ### 独立验证完整状态与特征
 
-![独立验证完整窗口状态和特征](/home/yuewang/Project/VSLAM/four_fisheye_rig/OpenMAVIS/results/vio_pipeline_20261008/runs/run_20261008T164905_validation_report_final_e0af39/report/diagnostics/tracking.png)
+![独立验证完整窗口状态和特征](../../results/vio_pipeline_20261008/runs/run_20261008T164905_validation_report_final_e0af39/report/diagnostics/tracking.png)
 
 ### 四路实际优化支持
 
-![开发四路局部优化观测](/home/yuewang/Project/VSLAM/four_fisheye_rig/OpenMAVIS/results/vio_pipeline_20261008/runs/run_20261008T164843_report_gui_final_d5b518/report/diagnostics/camera_support.png)
+![开发四路局部优化观测](../../results/vio_pipeline_20261008/runs/run_20261008T164843_report_gui_final_d5b518/report/diagnostics/camera_support.png)
 
 ## 6. GUI、失败记录与报告复用
 
@@ -119,7 +119,7 @@ evo 首次测试 `run_20261008T163409_evo_gui_verified_752e50` 的自动关闭�
 
 首次图例中的重复 `vio_matched` 已修正为 openmavis/basalt/okvis 独立文件名。最终 GUI 证据在 `evo_gui_probe/evidence_final/`；API 锁定测试证明请求启用回环仍无效，未做 Viewer 控件鼠标交互验证。
 
-![evo 真实 Qt 轨迹窗口](/home/yuewang/Project/VSLAM/four_fisheye_rig/OpenMAVIS/results/vio_pipeline_20261008/evo_gui_probe/evidence_final/evo_traj_trajectories.png)
+![evo 真实 Qt 轨迹窗口](../../results/vio_pipeline_20261008/evo_gui_probe/evidence_final/evo_traj_trajectories.png)
 
 `run_20261008T164204_basalt_compare_reuse_684c51` 完成 --from-run/--step compare：复用准备、参考和 VIO，仅重新评测。下列最终报告 run 复用完成产物，仅生成报告，不重跑 SLAM；三算法报告额外显示 evo 窗口。保留每次来源链和冻结文件哈希。
 
