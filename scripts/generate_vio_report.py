@@ -103,19 +103,28 @@ def generate(run):
     section('reference','参考轨迹与时间口径','<p>mocap 已转换到物理 IMU/body 与 IMU 时钟，原样导入，不再次应用时间偏移、marker 外参或拟合新偏移。SE(3) 对齐不估计尺度。</p><p>主结果是 OpenMAVIS 每帧处理完成的在线 body→当前世界位姿，仅评测 OK 且已惯性初始化的样本。Basalt/OKVIS2 使用来源保存的在线轨迹；其输出位姿数量不等于经本流水线证明的 OK 数量。</p>'+block('GT 转换与有效段',conversion)+block('冻结参考文件来源与哈希',reference))
     counts=[['输入组',summary.get('input_frames','—')],['实际处理',summary.get('processed_frames','—')],['全窗口 OK',summary.get('ok_frames','—')],['在线主评测位姿',online.get('accepted_poses','—')],['Common GT 可匹配样本',common.get('n','—')],['最终最大地图导出',summary.get('trajectories',{}).get('trajectory_body.txt',{}).get('rows','—')]]
     section('coverage','覆盖、初始化与四路支持',table(['口径','数量'],counts)+'<p>完整输入窗口包含初始化等待、丢失和重置；排除项与坐标段单列。四路观测次数不能相加作为独立地图点数。下图使用原始逐帧值，无平滑；未执行优化阶段保留缺口。</p>'+figure(directory/'diagnostics/tracking.png','完整跟踪状态、四路特征与处理耗时')+figure(directory/'diagnostics/camera_support.png','四路局部优化后观测支持')+block('完整回放汇总',summary)+block('保存产物计算的资源与耗时',saved_resources(run)))
+    poc=comp.get('profile') in ('static','motion')
     metric_names={'ape_translation':'APE 平移','rpe_translation_0.1m':'RPE 0.1 m','rpe_translation_0.5m':'RPE 0.5 m','rpe_translation_1m':'RPE 1 m'}
+    if poc:
+        metric_names={'ape_translation':'APE 平移','are_rotation':'ARE 旋转'}
+        for delta in (['0.1s','1s'] if comp['profile']=='static' else ['0.1m','0.5m','1m','0.1s','1s']):
+            metric_names['rpe_translation_'+delta]='RPE '+delta
+            metric_names['rre_rotation_'+delta]='RRE '+delta
     def metrics(records):
         rows=[]
         for key,label in metric_names.items():
             for name,r in records.items():
                 s=r.get('metrics',{}).get(key,{})
-                rows.append([label,name,*[format(s[k],'.6g') if isinstance(s.get(k),float) else s.get(k,'—') for k in ['rmse','mean','median','std','min','max','sse','n','p95','p99']],r.get('unavailable_metrics',{}).get(key,r.get('unavailable_metrics',{}).get('all',''))])
-        return table(['指标','算法','RMSE(m)','Mean(m)','Median(m)','STD(m)','Min(m)','Max(m)','SSE(m²)','N','P95(m)','P99(m)','不可用原因'],rows)
-    section('common','Common：共同有效时间戳','<p>所有参与算法与 GT 的整数纳秒交集，估计不插值、不补帧。GT 插值不外推、不跨无效段、最大间隔 50 ms。RPE 使用参考距离配对与 10% 容差，剔除跨无效段配对。</p>'+block('共同时间戳与可用性',common)+metrics(comp.get('common',{}))+''.join(figure(run/'04_vio_comparison/common'/n,c) for n,c in [('trajectories.png','各算法与 mocap 的共同窗口轨迹；各自 SE(3) 无尺度对齐'),('ape_translation.png','共同窗口平移 APE；缺口不连接'),('rpe_translation.png','共同参考距离帧对的平移 RPE')]))
+                unit='deg' if 'rotation' in key else 'm'
+                rows.append([label,name,unit,*[format(s[k],'.6g') if isinstance(s.get(k),float) else s.get(k,'—') for k in ['rmse','mean','median','std','min','max','sse','n','p95','p99']],r.get('unavailable_metrics',{}).get(key,r.get('unavailable_metrics',{}).get('all',''))])
+        return table(['指标','算法','单位','RMSE','Mean','Median','STD','Min','Max','SSE(单位²)','N','P95','P99','不可用原因'],rows)
+    if poc:
+        section('poc_policy','POC 评测规则','<p class="warning">本次每包单次运行，整体 NOT_GATED。采集侧 QA 与有效 GT 覆盖分别判读。静止对时缺乏运动激励，不构成独立同步验收。</p><p>静止包采用各评测窗口起始有效 1 s 平均位姿对齐；运动包整段匹配位置 SE(3) 对齐，均不修正尺度。Common 使用三算法共同有效窗口，Native 使用各自窗口；具体对齐起止时间保存在指标记录。</p><p>RPE/RRE 共用相同 GT 帧对，取所有算法连续性边界的并集，不跨 GT 空洞、输出中断及已知重置。</p>'+block('IMU 策略差异',comp.get('imu_policy_note'))+block('连续性及评测来源',comp))
+    section('common','Common：共同有效时间戳','<p>所有参与算法与 GT 的整数纳秒交集，估计不插值、不补帧。GT 插值不外推、不跨无效段、最大间隔 50 ms。RPE 使用参考距离配对与 10% 容差，剔除跨无效段配对。</p>'+block('共同时间戳与可用性',common)+metrics(comp.get('common',{}))+(''.join(figure(p,'共同窗口 '+p.stem+'；无平滑，连续性边界保留缺口') for p in sorted((run/'04_vio_comparison/common').glob('*.png'))) if poc else ''.join(figure(run/'04_vio_comparison/common'/n,c) for n,c in [('trajectories.png','各算法与 mocap 的共同窗口轨迹；各自 SE(3) 无尺度对齐'),('ape_translation.png','共同窗口平移 APE；缺口不连接'),('rpe_translation.png','共同参考距离帧对的平移 RPE')])))
     native=comp.get('native',{})
     section('native','Native：各自有效覆盖','<details><summary>展开各算法自身覆盖与指标</summary>'+metrics(native)+''.join(figure(p,p.parent.name+' Native '+p.name) for p in sorted((run/'04_vio_comparison/native').glob('*/*.png')))+block('完整统计与插值审计',native)+'</details>')
     final=comp.get('final_map',{})
-    section('final','最终地图补充结果','<details><summary>展开最终地图轨迹（非在线主评测）</summary><p>该轨迹通过最终参考关键帧重建，受后续地图优化影响，原导出器只保存最大地图。与在线轨迹分别评测，不能把导出行数作为成功跟踪帧数。微秒导出时间仅凭 frames.csv 唯一恢复，容差 501 ns，不用于在线时间或放宽 Common 匹配。</p>'+metrics({'openmavis_final_map':final})+''.join(figure(p,'最终地图补充 '+p.name) for p in sorted((run/'04_vio_comparison/final_map').glob('*.png')))+'</details>')
+    if not poc:section('final','最终地图补充结果','<details><summary>展开最终地图轨迹（非在线主评测）</summary><p>该轨迹通过最终参考关键帧重建，受后续地图优化影响，原导出器只保存最大地图。与在线轨迹分别评测，不能把导出行数作为成功跟踪帧数。微秒导出时间仅凭 frames.csv 唯一恢复，容差 501 ns，不用于在线时间或放宽 Common 匹配。</p>'+metrics({'openmavis_final_map':final})+''.join(figure(p,'最终地图补充 '+p.name) for p in sorted((run/'04_vio_comparison/final_map').glob('*.png')))+'</details>')
     configuration={}
     for n in ['01_preparation/inputs/algorithm_template.yaml','01_preparation/outputs/openmavis.yaml']:
         p=run/n

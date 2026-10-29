@@ -37,6 +37,7 @@ def main():
     ap.add_argument('--from-run',type=Path);ap.add_argument('--step',choices=['all','prepare','vio','compare','report'],default='all')
     ap.add_argument('--binary',type=Path,default=None);ap.add_argument('--config',type=Path)
     ap.add_argument('--imu-bias-policy',choices=['require-zero','estimate-from-zero'])
+    ap.add_argument('--evaluation-profile',choices=['legacy','static','motion'])
     ap.add_argument('--output',type=Path);ap.add_argument('--run-name',default='vio')
     ap.add_argument('--max-frames',type=int);ap.add_argument('--show-gui',action='store_true');ap.add_argument('--evo-show-gui',action='store_true');ap.add_argument('--realtime',action='store_true')
     args=ap.parse_args()
@@ -44,7 +45,7 @@ def main():
     if not args.run_name or any(c not in 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-' for c in args.run_name):ap.error('Unsafe run name')
     prior=manifest(args.from_run) if args.from_run else None
     if prior:
-        if args.basalt_run or args.okvis_run or args.config or args.imu_bias_policy:ap.error('--from-run uses frozen input/config; overrides forbidden')
+        if args.basalt_run or args.okvis_run or args.config or args.imu_bias_policy or args.evaluation_profile:ap.error('--from-run uses frozen input/config; overrides forbidden')
         if args.step in ('all','prepare'):ap.error('--from-run requires vio/compare/report')
         if args.step in ('compare','report') and (args.max_frames is not None or args.show_gui or args.realtime or args.binary):ap.error('VIO options cannot relabel reused trajectories')
         params=prior['parameters'].copy()
@@ -56,7 +57,7 @@ def main():
         identity=sm.get('dataset') or sm.get('parameters',{}).get('dataset')
         params=dict(source_run=str(source),source_kind='basalt' if args.basalt_run else 'okvis',dataset_identity=str(identity or source.name),
                     algorithm_template=str((args.config or ROOT/'Examples/Multi-Inertial/OAK4P_layout0921_repaired.yaml').resolve()),
-                    imu_bias_policy=args.imu_bias_policy or 'require-zero')
+                    imu_bias_policy=args.imu_bias_policy or 'require-zero',evaluation_profile=args.evaluation_profile or 'legacy')
     base=(args.output or ROOT/'results'/Path(params['dataset_identity']).name).resolve()
     protected=[Path(params['source_run']).resolve(),Path(params['dataset_identity']).resolve()]
     # Resolve possible dataset links before creating anything: an OKVIS link can
@@ -75,11 +76,12 @@ def main():
            started_utc=datetime.datetime.now(datetime.timezone.utc).isoformat(),software=git_info(),from_run=str(args.from_run.resolve()) if prior else None)
     m['software']['python_version']=sys.version
     m['software']['packages']={}
-    for package in ['numpy','PyYAML','matplotlib','Pillow','evo','PyQt6']:
+    for package in ['numpy','scipy','PyYAML','matplotlib','Pillow','evo','PyQt6']:
         try:m['software']['packages'][package]=importlib.metadata.version(package)
         except importlib.metadata.PackageNotFoundError:m['software']['packages'][package]=None
     provenance=run/'provenance';provenance.mkdir()
     for p in (ROOT/'scripts').glob('*.py'):shutil.copyfile(p,provenance/p.name)
+    for p in (ROOT/'scripts').glob('poc*_origin.json'):shutil.copyfile(p,provenance/p.name)
     shutil.copytree(ROOT/'scripts/vendor',provenance/'vendor')
     m['implementation_sha256']=hashes(provenance)
     m['runtime_environment']={k:os.environ.get(k) for k in ['DISPLAY','QT_QPA_PLATFORM','PANGOLIN_WINDOW_URI']}
@@ -163,7 +165,10 @@ def main():
         summary.update(online=online,show_gui=args.show_gui,realtime=args.realtime,wall_seconds=time.monotonic()-t,requested_max_frames=args.max_frames)
         dump(directory/'outputs/summary.json',summary);m['tracking_acceptance']=summary['acceptance'];m['vio_summary']=summary
     def compare(directory):
-        from compare_vio_trajectories import compare
+        if params.get('evaluation_profile','legacy')=='legacy':
+            from compare_vio_trajectories import compare
+        else:
+            from compare_poc_trajectories import compare
         m['comparison']=compare(run);m['comparison_availability']=m['comparison']['common_timestamps']['status']
     try:
         if prior:

@@ -1,0 +1,5 @@
+{
+  "source": "/home/yuewang/Project/VSLAM/four_fisheye_rig/OKVIS2-X/scripts/poc_evaluation.py",
+  "sha256": "c98746701c54b1011b1d459fc359e2bf41c39cd0ead431872700f388aa4d28bf",
+  "adaptation": "Metric core only; local IO; alignment window provenance and SSE added. Three-way orchestration implemented separately."
+}
