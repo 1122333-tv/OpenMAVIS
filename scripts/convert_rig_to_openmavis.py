@@ -23,13 +23,20 @@ def pose_matrix(p):
     if not np.isfinite(T).all(): raise ValueError('Nonfinite calibration transform')
     return T
 
-def convert(calibration,template,output,offset,fps):
+def convert(calibration,template,output,offset,fps,imu_bias_policy='require-zero'):
     c=json.loads(Path(calibration).read_text())['value0']; cfg=load_settings(template)
     if any(len(c[k])!=4 for k in ['intrinsics','T_imu_cam','resolution']): raise ValueError('Four physical cameras required')
     if any(r!=c['resolution'][0] for r in c['resolution']): raise ValueError('Different camera resolutions unsupported')
     if any(type(v)!=int or v<=0 for v in c['resolution'][0]): raise ValueError('Invalid resolution')
+    if imu_bias_policy not in ('require-zero','estimate-from-zero'):
+        raise ValueError('Unknown IMU bias policy: '+imu_bias_policy)
     for key,size in [('calib_accel_bias',9),('calib_gyro_bias',12)]:
-        if len(c[key])!=size or any(v!=0 for v in c[key]): raise ValueError('Nonzero/invalid IMU correction unsupported: '+key)
+        if len(c[key])!=size or not all(math.isfinite(v) for v in c[key]):
+            raise ValueError('Invalid IMU correction: '+key)
+        if any(v!=0 for v in c[key][3:]):
+            raise ValueError('Nonzero IMU scale/misalignment correction unsupported: '+key)
+        if imu_bias_policy=='require-zero' and any(v!=0 for v in c[key]):
+            raise ValueError('Nonzero IMU correction unsupported: '+key)
     transforms=[]
     for i,intr in enumerate(c['intrinsics']):
         if intr['camera_type']!='kb4': raise ValueError('Only exact KB4 conversion supported')
@@ -51,5 +58,10 @@ def convert(calibration,template,output,offset,fps):
     if type(offset)!=int or abs(offset)>=100_000_000 or fps<1: raise ValueError('Invalid timing')
     Path(output).write_text('%YAML:1.0\n---\n'+yaml.dump(cfg,Dumper=Dumper,sort_keys=False,default_flow_style=None))
     report=dict(calibration_sha256=sha(calibration),template_sha256=sha(template),camera_order=['cam0','cam1','cam2','cam3'],cam_time_offset_ns=offset,
+                imu_bias_policy=imu_bias_policy,
+                imu_correction=dict(source_accel=c['calib_accel_bias'],source_gyro=c['calib_gyro_bias'],
+                    fixed_bias_applied=False,raw_samples_unchanged=True,initial_accel_bias=[0.,0.,0.],
+                    initial_gyro_bias=[0.,0.,0.],online_bias_estimation=True,
+                    implementation='Tracking constructs IMU::Bias(); LocalMapping estimates inertial biases'),
                 transform_equation='T_b_c = camera -> physical IMU; Stereo = inverse(T_b_c0) * T_b_c1',matrices={k:T.tolist() for k,T in matrices.items()},fps=int(fps),filter_policy='OpenMAVIS valid-ray feature filter; reference algorithms retain their saved mask policies')
     dump(Path(output).with_name('calibration_conversion.json'),report);return report

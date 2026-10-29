@@ -36,6 +36,7 @@ def main():
     sources.add_argument('--basalt-run',type=Path);sources.add_argument('--okvis-run',type=Path)
     ap.add_argument('--from-run',type=Path);ap.add_argument('--step',choices=['all','prepare','vio','compare','report'],default='all')
     ap.add_argument('--binary',type=Path,default=None);ap.add_argument('--config',type=Path)
+    ap.add_argument('--imu-bias-policy',choices=['require-zero','estimate-from-zero'])
     ap.add_argument('--output',type=Path);ap.add_argument('--run-name',default='vio')
     ap.add_argument('--max-frames',type=int);ap.add_argument('--show-gui',action='store_true');ap.add_argument('--evo-show-gui',action='store_true');ap.add_argument('--realtime',action='store_true')
     args=ap.parse_args()
@@ -43,7 +44,7 @@ def main():
     if not args.run_name or any(c not in 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-' for c in args.run_name):ap.error('Unsafe run name')
     prior=manifest(args.from_run) if args.from_run else None
     if prior:
-        if args.basalt_run or args.okvis_run or args.config:ap.error('--from-run uses frozen input/config; overrides forbidden')
+        if args.basalt_run or args.okvis_run or args.config or args.imu_bias_policy:ap.error('--from-run uses frozen input/config; overrides forbidden')
         if args.step in ('all','prepare'):ap.error('--from-run requires vio/compare/report')
         if args.step in ('compare','report') and (args.max_frames is not None or args.show_gui or args.realtime or args.binary):ap.error('VIO options cannot relabel reused trajectories')
         params=prior['parameters'].copy()
@@ -54,7 +55,8 @@ def main():
         source=source.resolve();sm=source_hint(source)
         identity=sm.get('dataset') or sm.get('parameters',{}).get('dataset')
         params=dict(source_run=str(source),source_kind='basalt' if args.basalt_run else 'okvis',dataset_identity=str(identity or source.name),
-                    algorithm_template=str((args.config or ROOT/'Examples/Multi-Inertial/OAK4P_layout0921_repaired.yaml').resolve()))
+                    algorithm_template=str((args.config or ROOT/'Examples/Multi-Inertial/OAK4P_layout0921_repaired.yaml').resolve()),
+                    imu_bias_policy=args.imu_bias_policy or 'require-zero')
     base=(args.output or ROOT/'results'/Path(params['dataset_identity']).name).resolve()
     protected=[Path(params['source_run']).resolve(),Path(params['dataset_identity']).resolve()]
     # Resolve possible dataset links before creating anything: an OKVIS link can
@@ -132,7 +134,7 @@ def main():
         times=[int(r[0]) for r in csv_rows(info['dataset']/'mav0/cam0/data.csv')]
         if len(times)<2 or any(a>=b for a,b in zip(times,times[1:])):raise ValueError('Invalid image times')
         fps=round(1e9/statistics.median(b-a for a,b in zip(times,times[1:])))
-        conversion=convert(directory/'inputs/calibration.json',directory/'inputs/algorithm_template.yaml',directory/'outputs/openmavis.yaml',info['offset'],fps)
+        conversion=convert(directory/'inputs/calibration.json',directory/'inputs/algorithm_template.yaml',directory/'outputs/openmavis.yaml',info['offset'],fps,params.get('imu_bias_policy','require-zero'))
         check_binary()
         cmd=[binary,'--vocabulary',ROOT/'Vocabulary/ORBvoc.txt','--settings',directory/'outputs/openmavis.yaml','--dataset',info['dataset'],'--cam-time-offset-ns',info['offset'],'--output',directory/'outputs/input_validation','--validate-only']
         command('prepare',cmd)
