@@ -82,7 +82,7 @@ vio_python=/home/yuewang/.local/share/pipx/venvs/evo/bin/python
 
 `--from-run` 核对每个复用阶段的文件哈希，创建新 run，不覆盖原 run。不能再指定来源或算法模板；compare/report 禁止通过 `--max-frames`、GUI/VIO 选项重新标记保存轨迹。prepare/vio 的部分报告会列出缺失阶段；可以继续通过新 run 的 `--from-run` 执行下一阶段。
 
-`--binary` 用于新的 VIO 执行；`--config` 作为新来源的算法模板。标定参数始终从来源转换，只接受四路同分辨率 KB4、正值各向同性噪声和零 IMU 校正，其他标定明确拒绝。
+`--binary` 用于新的 VIO 执行；`--config` 作为新来源的算法模板。标定参数始终从来源转换，只接受四路同分辨率 KB4 和正值各向同性噪声；默认要求零 IMU 校正。非零固定 bias 的显式在线估计策略见第 7 节，非零 IMU 尺度/非正交校正仍拒绝。
 
 ## 5. 产物与评测口径
 
@@ -119,3 +119,47 @@ git diff --check
 ```
 
 带 `--vio-mode <词典> <生成的 VIO YAML>` 的 C++ 回归会实际建立 System，并验证回环开启请求无效和空帧无在线位姿。旧的 `--empty-frame-diagnostics <词典> <原 YAML>` 测试仍保留。
+
+## 7. 1026 POC：原始 IMU 与三算法评测
+
+2026-10-28 新增两个显式选项；不指定时保持旧行为。
+
+| 选项 | 默认 | POC 用法 |
+| --- | --- | --- |
+| `--imu-bias-policy` | `require-zero` | `estimate-from-zero`：保留原始 IMU，零初始 bias，由 OpenMAVIS 在线估计 |
+| `--evaluation-profile` | `legacy` | `static` 或 `motion`：APE/ARE、平移 RPE/旋转 RRE、RMSE/P95 |
+
+非零固定 bias 只在显式 `estimate-from-zero` 下允许；源标定不改写，固定 bias 不预先扣除。IMU 尺度和非正交校正仍必须为零，非有限值拒绝。转换审计保存原始 bias、初始化策略和相机几何。该配置与本次 OKVIS2 raw-IMU 基线一致；已有 Basalt 参考应用固定 IMU 标定后估计剩余 bias，报告必须保留这一差异。
+
+静止评测采用每个窗口起始有效 1 s 的平均位姿对齐，RPE/RRE 使用 0.1/1 s；运动评测采用整段匹配位置 SE(3) 对齐，距离间隔 0.1/0.5/1 m，并补充 0.1/1 s。均不校正尺度。Common 是三算法与可用 GT 的精确纳秒交集；帧对使用全部算法连续性边界的并集，排除 GT 空洞、输出中断和已知重置。保存实际对齐窗口、原始误差和帧对哈希。未初始化或存在多个已初始化坐标段时，Common 不排名，Native 分段诊断并保留失败原因。
+
+单包示例（把 `okvis_run` 设置为已完成的 run 绝对路径）：
+
+```bash
+vio_python=/home/yuewang/.local/share/pipx/venvs/evo/bin/python
+"$vio_python" scripts/run_vio_pipeline.py \
+  --okvis-run "$okvis_run" \
+  --imu-bias-policy estimate-from-zero \
+  --evaluation-profile motion \
+  --run-name poc1026_small_move
+```
+
+六包调度器读取 OKVIS2 批次 `state.json` 中明确记录的完成 run，冻结来源文件哈希，逐包创建新目录。先指定 `--case small_move` 完成验证，再用 `--remaining` 跑其余五包；已经完成的 small_move 不重复执行。返回码 2 的跟踪/评测未通过保留为 `diagnostic_complete`，可以继续其他场景；执行错误返回码 1 停止队列。运行中断或失败的尝试不自动覆盖重跑，须先检查保存日志。
+
+```bash
+vio_python=/home/yuewang/.local/share/pipx/venvs/evo/bin/python
+source_state=/home/yuewang/Project/VSLAM/four_fisheye_rig/OKVIS2-X/results/20261028_poc1026_parallel_rawbias/state.json
+batch=/home/yuewang/Project/VSLAM/four_fisheye_rig/OpenMAVIS/results/20261028_poc1026_rawbias
+"$vio_python" scripts/run_poc_batch.py --source-state "$source_state" --output "$batch" --case small_move
+# 审核 small_move 后继续；已完成的包不会再次执行。
+"$vio_python" scripts/run_poc_batch.py --source-state "$source_state" --output "$batch" --remaining
+"$vio_python" scripts/summarize_poc_batch.py --batch "$batch"
+```
+
+汇总输出为 `report/index.html`、`report/report_data.json`、`report/metrics.csv`。HTML 自包含图片并支持放大；五包为主报告，`static_H_30s_humanmove` 单列补充。轨迹按世界 Y 向上、XZ 水平面绘制；在线结果不混入最终地图轨迹。`protected_inputs.json` 与 `preservation.json` 保存来源保护校验。
+
+完整回归覆盖 IMU bias、POC 指标与旧流程：
+
+```bash
+"$vio_python" -m unittest discover -s scripts -p 'test*.py'
+```
